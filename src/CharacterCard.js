@@ -1,6 +1,5 @@
 import { createSkillsList } from './SkillsList.js';
 import { createPurseEditor } from './PurseEditor.js';
-import { makeEditable } from './utils.js';
 import { showModal } from './modal.js';
 
 export function createCharacterCard(character, inventoryElement, onCharacterChange) {
@@ -16,65 +15,76 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
   card.innerHTML = `
     <div class="char-card-inner">
       <div class="char-card-face char-card-front">
-        <button class="flip-btn flip-btn-top">Inventory →</button>
-
-        <div class="card-header">
-          <h2 class="editable-text" data-field="name">${character.name}</h2>
-          <p class="char-title editable-text" data-field="title">${character.title || ''}</p>
-          <p class="char-subtitle">
-            <span class="editable-text" data-field="race">${character.race}</span> —
-            <span class="clickable-name" data-occupation>${character.occupation}</span>
-          </p>
+        <div class="card-name-bar">
+          <button class="flip-btn">Inventory →</button>
+          <h2 class="card-name-toggle">${character.name}</h2>
         </div>
 
-        <div class="section backstory-section">
-          <h3>Backstory</h3>
-          <p class="backstory-text editable-text multiline" data-field="backstory">${character.backstory}</p>
-          <button class="expand-btn">Expand</button>
-        </div>
-
-        <div class="section" data-race-section></div>
-        <div class="section" data-character-section></div>
-        <div class="section" data-occupation-section></div>
-
-        <div class="section">
-          <h3>Dice</h3>
-          <div class="dice-grid">
-            ${Object.entries(dice).map(([label, diceArr]) => {
-              const display = (!diceArr || diceArr.length === 0) ? 'N/A' : diceArr.join(' + ');
-              return `
-                <div class="stat">
-                  <span class="stat-label">${label}</span>
-                  <span class="stat-die">${display}</span>
-                </div>
-              `;
-            }).join('')}
+        <div class="card-body">
+          <div class="card-header">
+            <p class="char-title">${character.title || ''}</p>
+            <p class="char-subtitle">
+              ${character.race} —
+              <span class="clickable-name" data-occupation>${character.occupation}</span>
+            </p>
           </div>
-        </div>
 
-        <div class="section">
-          <h3>Skills</h3>
-          <div class="skills-slot"></div>
-          <label class="edit-field">
-            Skill Points:
-            <input type="number" class="skillpoints-input" value="${character.skillPoints ?? 0}" />
-          </label>
-        </div>
+          <div class="section backstory-section">
+            <h3>Backstory</h3>
+            <p class="backstory-text">${character.backstory}</p>
+            <button class="expand-btn">Expand</button>
+          </div>
 
-        <div class="section level-row">
-          <div><strong>Level:</strong> <span class="editable-text" data-field="level">${character.level}</span></div>
-          <label class="edit-field">
-            EXP:
-            <input type="number" class="exp-input" value="${character.exp ?? 0}" />
-          </label>
+          <div class="section" data-race-section></div>
+          <div class="section" data-character-section></div>
+          <div class="section" data-occupation-section></div>
+
+          <div class="section">
+            <h3>Dice</h3>
+            <div class="dice-grid">
+              ${Object.entries(dice).map(([label, diceArr]) => {
+                const display = (!diceArr || diceArr.length === 0) ? 'N/A' : diceArr.join(' + ');
+                return `
+                  <div class="stat">
+                    <span class="stat-label">${label}</span>
+                    <span class="stat-die">${display}</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Skills</h3>
+            <div class="skills-slot"></div>
+            <label class="edit-field">
+              Skill Points:
+              <input type="number" class="skillpoints-input" value="${character.skillPoints ?? 0}" />
+            </label>
+          </div>
+
+          <div class="section level-row">
+            <div><strong>Level:</strong> ${character.level}</div>
+            <div class="exp-editor">
+              <strong>EXP:</strong>
+              <input type="number" class="exp-value-input" value="${character.exp?.value ?? 0}" />
+              <span>/</span>
+              <input type="number" class="exp-cap-input" value="${character.exp?.cap ?? 100}" />
+            </div>
+          </div>
         </div>
       </div>
 
       <div class="char-card-face char-card-back">
-        <button class="flip-btn flip-btn-top">← Sheet</button>
-        <h2>${character.name}'s Inventory</h2>
-        <div class="purse-slot"></div>
-        <div class="inventory-slot"></div>
+        <div class="card-name-bar">
+          <button class="flip-btn">← Sheet</button>
+          <h2 class="card-name-toggle">${character.name}'s Inventory</h2>
+        </div>
+
+        <div class="card-body">
+          <div class="purse-slot"></div>
+          <div class="inventory-slot"></div>
+        </div>
       </div>
     </div>
   `;
@@ -97,7 +107,7 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
     return p;
   }
 
-  // --- Race section (hideable): racial skills as editable list + passive/ability popups ---
+  // --- Race section ---
   const raceContent = document.createElement('div');
   const raceHeading = document.createElement('h3');
   raceHeading.textContent = 'Race';
@@ -110,11 +120,17 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
   const racialSkillsSlot = document.createElement('div');
   raceContent.appendChild(racialSkillsSlot);
 
+  if (character.racialTraits && character.racialTraits.length) {
+    const traitsP = document.createElement('p');
+    traitsP.innerHTML = `<strong>Traits:</strong> ${character.racialTraits.join(', ')}`;
+    raceContent.appendChild(traitsP);
+  }
+
   raceContent.appendChild(createClickableRow('Passive', character.racialPassive));
   raceContent.appendChild(createClickableRow('Ability', character.racialAbility));
   card.querySelector('[data-race-section]').appendChild(raceContent);
 
-  // --- Character section (hideable) ---
+  // --- Character section ---
   const charContent = document.createElement('div');
   const charHeading = document.createElement('h3');
   charHeading.textContent = 'Character';
@@ -123,7 +139,7 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
   charContent.appendChild(createClickableRow('Ability', character.characterAbility));
   card.querySelector('[data-character-section]').appendChild(charContent);
 
-  // --- Occupation section: occupation skills as editable list ---
+  // --- Occupation section ---
   const occContent = document.createElement('div');
   const occHeading = document.createElement('h3');
   occHeading.textContent = 'Occupation Skills';
@@ -132,7 +148,6 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
   occContent.appendChild(occSkillsSlot);
   card.querySelector('[data-occupation-section]').appendChild(occContent);
 
-  // Occupation name (in header) is clickable → shows occupationPassive
   const occNameEl = card.querySelector('[data-occupation]');
   if (character.occupationPassive) {
     occNameEl.addEventListener('click', () => {
@@ -140,7 +155,7 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
     });
   }
 
-  // --- Editable-list sections: racialSkills, occupationSkills, skills ---
+  // --- Editable-list sections (skills only — names editable via their own list UI) ---
   const racialSkillsEl = createSkillsList(character.racialSkills || [], (updated) => {
     character.racialSkills = updated;
     notify();
@@ -159,22 +174,12 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
   });
   card.querySelector('.skills-slot').appendChild(skillsEl);
 
-  // --- Purse editor — top of inventory face ---
+  // --- Purse editor ---
   const purseEl = createPurseEditor(character.coinPouch, (updatedPouch) => {
     character.coinPouch = updatedPouch;
     notify();
   });
   card.querySelector('.purse-slot').appendChild(purseEl);
-
-  // --- Editable text fields ---
-  card.querySelectorAll('[data-field]').forEach(el => {
-    makeEditable(el, (newText) => {
-      const field = el.dataset.field;
-      character[field] = field === 'level' ? Number(newText) || 0 : newText;
-      notify();
-      syncCardHeight(card);
-    });
-  });
 
   // --- Flip behavior ---
   card.querySelectorAll('.flip-btn').forEach(btn => {
@@ -193,13 +198,25 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
     syncCardHeight(card);
   });
 
-  // --- EXP / Skill Points ---
-  card.querySelector('.exp-input').addEventListener('input', (e) => {
-    character.exp = Number(e.target.value) || 0;
-    notify();
+  // --- Collapse/expand whole card by clicking the name (either face) ---
+  card.querySelectorAll('.card-name-toggle').forEach(nameEl => {
+    nameEl.addEventListener('click', () => {
+      card.classList.toggle('is-collapsed');
+      syncCardHeight(card);
+    });
   });
+
+  // --- Skill points / EXP ---
   card.querySelector('.skillpoints-input').addEventListener('input', (e) => {
     character.skillPoints = Number(e.target.value) || 0;
+    notify();
+  });
+  card.querySelector('.exp-value-input').addEventListener('input', (e) => {
+    character.exp.value = Number(e.target.value) || 0;
+    notify();
+  });
+  card.querySelector('.exp-cap-input').addEventListener('input', (e) => {
+    character.exp.cap = Number(e.target.value) || 0;
     notify();
   });
 
@@ -215,10 +232,19 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
 }
 
 function syncCardHeight(card) {
-  const front = card.querySelector('.char-card-front');
-  const back = card.querySelector('.char-card-back');
   const inner = card.querySelector('.char-card-inner');
 
+  if (card.classList.contains('is-collapsed')) {
+    const frontBar = card.querySelector('.char-card-front .card-name-bar');
+    const backBar = card.querySelector('.char-card-back .card-name-bar');
+    const tallest = Math.max(frontBar.scrollHeight, backBar.scrollHeight) + 32; // padding buffer
+    inner.style.height = `${tallest}px`;
+    card.style.height = `${tallest}px`;
+    return;
+  }
+
+  const front = card.querySelector('.char-card-front');
+  const back = card.querySelector('.char-card-back');
   const tallest = Math.max(front.scrollHeight, back.scrollHeight);
   inner.style.height = `${tallest}px`;
   card.style.height = `${tallest}px`;
