@@ -31,7 +31,7 @@ export function createInventoryList(items, onChange) {
         if (entry.qty > 0) {
           entry.qty -= 1;
           if (entry.qty === 0) {
-            items.splice(index, 1); // remove item entirely at 0
+            items.splice(index, 1); // remove item entirely at 0 
           }
           render();
           if (onChange) onChange(items);
