@@ -1,7 +1,7 @@
 // src/BottomPanel.js
 
 import { toCopper, fromCopper, formatPurse, spend, addFunds } from './currency.js';
-import { getModBreakdown } from './mods.js';
+import { getModBreakdown } from './Mods.js';
 import { showModal } from './modal.js';
 
 /**
