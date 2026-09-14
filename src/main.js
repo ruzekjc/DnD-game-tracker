@@ -1,7 +1,7 @@
 import { createCharacterCard } from './CharacterCard.js';
 import { createInventoryList } from './InventoryList.js';
 import { createShopEnemyPanel } from './ShopEnemyPanel.js';
-import { createBottomPanel } from './Bottompanel.js';
+import { createBottomPanel } from './BottomPanel.js';
 import { pickAndImportFiles, upsertRecord, saveRecord, isFileSystemAccessSupported } from './dataStore.js';
 import { initGoogleSignIn, getCurrentUser, signOut } from './auth.js';
 import { showModal } from './modal.js';
