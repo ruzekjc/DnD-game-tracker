@@ -70,5 +70,6 @@ export function createInventoryList(items, onChange) {
   }
 
   render();
+  container.refresh = render; // exposed so external mutations (e.g. bottom panel buy/sell) can trigger a redraw
   return container;
 }

@@ -2,27 +2,103 @@
   font-family: 'Roboto Mono', monospace;
 }
 
+html, body {
+  height: 100%;
+}
+
 body {
   background: #1a1024;
   color: #f0e6ff;
   margin: 0;
   padding: 24px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
 }
 
-#app {
+.dm-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  max-width: 1900px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.dm-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dm-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.dm-signin-placeholder {
+  font-size: 0.85rem;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* Locked three-panel layout: characters (scrolls internally) + a fixed-size
+   shop/enemy sidebar (does not resize when its tabs switch) on top, a full-
+   width bottom panel underneath. */
+.app-layout {
   display: grid;
-  grid-template-columns: repeat(3, minmax(300px, 1fr));
+  grid-template-columns: 1fr 360px;
+  grid-template-rows: 1fr auto;
+  grid-template-areas:
+    "characters shop"
+    "bottom     bottom";
   gap: 24px;
-  justify-content: center;
-  max-width: 1560px;
+  max-width: 1900px;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   margin: 0 auto;
 }
 
-@media (max-width: 1050px) {
-  #app { grid-template-columns: repeat(2, minmax(300px, 1fr)); }
+#app {
+  grid-area: characters;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  align-content: start;
+  overflow-y: auto;
+  min-height: 0; /* lets the grid track shrink so overflow-y can actually scroll */
+  padding-right: 4px;
 }
-@media (max-width: 700px) {
-  #app { grid-template-columns: 1fr; }
+
+#shop-enemy-app {
+  grid-area: shop;
+  min-height: 0;
+  height: 100%;
+}
+
+#bottom-panel-app {
+  grid-area: bottom;
+}
+
+@media (max-width: 1050px) {
+  body { height: auto; overflow-y: auto; }
+  .app-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+      "characters"
+      "shop"
+      "bottom";
+    flex: none;
+  }
+  #app { overflow-y: visible; }
+  #shop-enemy-app { height: 480px; }
 }
 
 .char-card {
@@ -334,4 +410,385 @@ body {
   border: 1px solid #7a4a4a;
   border-radius: 8px;
   background: #3a2828;
+}
+/* --- Shop / Enemy panel (fixed-size sidebar; content scrolls internally so
+   switching tabs never changes the panel's own size) --- */
+
+.shop-enemy-panel {
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: #2b2438;
+  border: 1px solid #5a4a7a;
+  border-radius: 12px;
+  padding: 16px;
+  color: #f0e6ff;
+  overflow: hidden;
+}
+
+.shop-enemy-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex: 0 0 auto;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #5a4a7a;
+  border-radius: 6px;
+  background: #3a3050;
+  color: #f0e6ff;
+  cursor: pointer;
+  font-family: inherit;
+  opacity: 0.7;
+}
+.tab-btn:hover { opacity: 0.9; }
+.tab-btn.is-active {
+  background: #6b4fa0;
+  border-color: #7d5cbb;
+  opacity: 1;
+}
+
+.shop-enemy-select {
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 16px;
+  border-radius: 6px;
+  border: 1px solid #5a4a7a;
+  background: #3a3050;
+  color: #f0e6ff;
+  font-family: inherit;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+}
+
+.shop-enemy-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.shop-header,
+.enemy-header {
+  margin-bottom: 12px;
+}
+
+.shop-name,
+.enemy-name {
+  margin: 0 0 4px 0;
+}
+
+.shop-description {
+  opacity: 0.85;
+  font-style: italic;
+  margin: 0;
+}
+
+.enemy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.enemy-tier-badge {
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #3a3050;
+  border: 1px solid #5a4a7a;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.enemy-tier-basic { border-color: #4a9d5f; color: #8fe0a3; }
+.enemy-tier-enforcer { border-color: #c9a13a; color: #f0d38a; }
+.enemy-tier-boss { border-color: #9d4a4a; color: #f0a0a0; }
+
+.shop-inventory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shop-inventory-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #3a3050;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.item-price {
+  font-weight: bold;
+  opacity: 0.9;
+  white-space: nowrap;
+  margin-left: 12px;
+}
+.shop-empty,
+.bp-empty {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.enemy-mods-list {
+  margin: 0;
+  opacity: 0.9;
+}
+
+.conditions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.condition-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #3a3050;
+  border-radius: 6px;
+  padding: 6px 12px;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, border-color 0.15s ease;
+  border: 1px solid transparent;
+}
+.condition-row.is-active {
+  opacity: 1;
+  border-color: #7d5cbb;
+}
+.condition-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.condition-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.condition-value {
+  min-width: 24px;
+  text-align: center;
+  font-weight: bold;
+}
+.condition-applies-to {
+  background: rgba(183, 156, 240, 0.12);
+  border: 1px solid #7d5cbb;
+  color: #f0e6ff;
+  font-family: inherit;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  padding: 3px 4px;
+}
+.condition-remove {
+  background: none;
+  border: none;
+  color: #f0a0a0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+.condition-remove:hover { color: #f5c0c0; }
+
+/* --- Bottom panel: shared character select + Inventory / Dice Roller tabs --- */
+
+.bottom-panel {
+  background: #2b2438;
+  border: 1px solid #5a4a7a;
+  border-radius: 12px;
+  padding: 16px;
+  box-sizing: border-box;
+  color: #f0e6ff;
+}
+
+.bottom-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.bp-character-select {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #5a4a7a;
+  background: #3a3050;
+  color: #f0e6ff;
+  font-family: inherit;
+  min-width: 180px;
+}
+
+.bottom-panel-tabs {
+  display: flex;
+  gap: 8px;
+}
+.bottom-panel-tabs .tab-btn {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+}
+
+.bp-wallet {
+  font-size: 1.05rem;
+  font-weight: bold;
+  margin-bottom: 12px;
+}
+
+.bp-inventory-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.bp-shop-column h4,
+.bp-cart-column h4,
+.bp-owned-column h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.9rem;
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bp-shop-select {
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  border: 1px solid #5a4a7a;
+  background: #3a3050;
+  color: #f0e6ff;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.bp-shop-items,
+.bp-cart-items,
+.bp-owned-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.bp-shop-item-row,
+.bp-cart-item-row,
+.bp-owned-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #3a3050;
+  border-radius: 6px;
+  padding: 6px 10px;
+  gap: 8px;
+}
+
+.bp-add-cart-btn,
+.bp-remove-cart-btn,
+.bp-return-btn,
+.bp-buy-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  color: white;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.bp-add-cart-btn { background: #6b4fa0; }
+.bp-add-cart-btn:hover { background: #7d5cbb; }
+.bp-remove-cart-btn { background: #9d4a4a; padding: 4px 8px; }
+.bp-remove-cart-btn:hover { background: #b55c5c; }
+.bp-return-btn { background: #9d4a4a; }
+.bp-return-btn:hover { background: #b55c5c; }
+
+.bp-cart-total {
+  margin: 8px 0;
+  font-weight: bold;
+}
+
+.bp-buy-btn {
+  background: #4a9d5f;
+  width: 100%;
+  padding: 8px;
+}
+.bp-buy-btn:hover { background: #5cb571; }
+
+.bp-dice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.bp-stat-roll-btn {
+  padding: 10px;
+  border: 1px solid #5a4a7a;
+  border-radius: 8px;
+  background: #3a3050;
+  color: #f0e6ff;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: bold;
+}
+.bp-stat-roll-btn:hover {
+  background: #6b4fa0;
+  border-color: #7d5cbb;
+}
+
+.bp-roll-result {
+  font-size: 1.1rem;
+  padding: 10px;
+  background: #3a3050;
+  border-radius: 8px;
+}
+
+@media (max-width: 1050px) {
+  .bp-inventory-columns { grid-template-columns: 1fr; }
+}
+
+/* --- Import / Save buttons (data layer) --- */
+
+.import-btn {
+  border: 1px dashed #7d5cbb;
+  border-radius: 8px;
+  background: rgba(107, 79, 160, 0.15);
+  color: #f0e6ff;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 10px 14px;
+  font-weight: bold;
+}
+.import-btn:hover { background: rgba(107, 79, 160, 0.3); }
+.import-btn:disabled { opacity: 0.5; cursor: default; }
+
+.import-btn.full-span {
+  grid-column: 1 / -1;
+  text-align: center;
+}
+
+.shop-enemy-tabs .import-btn {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  font-weight: normal;
+}
+
+.save-btn {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 6px;
+  background: #4a9d5f;
+  color: white;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.save-btn:hover { background: #5cb571; }
+.save-btn:disabled { opacity: 0.6; cursor: default; }
+
+.enemy-header {
+  flex-wrap: wrap;
+  gap: 8px;
 }

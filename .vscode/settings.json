@@ -1,0 +1,6 @@
+{
+    "fiveServer.host": "localhost",
+    "liveServer.settings.ignoreFiles": [
+    "**/data/**"
+    ]
+}

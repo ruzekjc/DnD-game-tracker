@@ -1,8 +1,9 @@
 import { createSkillsList } from './SkillsList.js';
 import { createPurseEditor } from './PurseEditor.js';
+import { createConditionsList } from './ConditionsList.js';
 import { showModal } from './modal.js';
 
-export function createCharacterCard(character, inventoryElement, onCharacterChange) {
+export function createCharacterCard(character, inventoryElement, onCharacterChange, onSaveRequest) {
   const card = document.createElement('div');
   card.className = 'char-card';
 
@@ -18,6 +19,7 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
         <div class="card-name-bar">
           <button class="flip-btn">Inventory →</button>
           <h2 class="card-name-toggle">${character.name}</h2>
+          ${onSaveRequest ? '<button class="save-btn">💾 Save</button>' : ''}
         </div>
 
         <div class="card-body">
@@ -52,6 +54,11 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
                 `;
               }).join('')}
             </div>
+          </div>
+
+          <div class="section">
+            <h3>Conditions</h3>
+            <div class="conditions-slot"></div>
           </div>
 
           <div class="section">
@@ -174,12 +181,23 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
   });
   card.querySelector('.skills-slot').appendChild(skillsEl);
 
+  // --- Conditions (toggleable, can carry a mod value + which stat they apply to) ---
+  const conditionsSlot = card.querySelector('.conditions-slot');
+  if (!character.conditions) character.conditions = [];
+  const conditionsEl = createConditionsList(character.conditions, (updated) => {
+    character.conditions = updated;
+    notify();
+  }, Object.keys(dice));
+  conditionsSlot.appendChild(conditionsEl);
+
   // --- Purse editor ---
   const purseEl = createPurseEditor(character.coinPouch, (updatedPouch) => {
     character.coinPouch = updatedPouch;
     notify();
   });
   card.querySelector('.purse-slot').appendChild(purseEl);
+  card.purseEl = purseEl;
+  card.inventoryEl = inventoryElement; // exposed so main.js/BottomPanel can trigger refreshes after external edits
 
   // --- Flip behavior ---
   card.querySelectorAll('.flip-btn').forEach(btn => {
@@ -188,6 +206,18 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
       syncCardHeight(card);
     });
   });
+
+  // --- Save ---
+  const saveBtn = card.querySelector('.save-btn');
+  if (saveBtn && onSaveRequest) {
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+      await onSaveRequest();
+      saveBtn.disabled = false;
+      saveBtn.textContent = '💾 Save';
+    });
+  }
 
   // --- Backstory expand ---
   const backstoryText = card.querySelector('.backstory-text');
@@ -225,6 +255,7 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
   observer.observe(card.querySelector('.skills-slot'), { childList: true, subtree: true });
   observer.observe(racialSkillsSlot, { childList: true, subtree: true });
   observer.observe(occSkillsSlot, { childList: true, subtree: true });
+  observer.observe(conditionsSlot, { childList: true, subtree: true });
 
   requestAnimationFrame(() => syncCardHeight(card));
 
