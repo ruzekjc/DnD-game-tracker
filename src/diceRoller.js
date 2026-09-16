@@ -6,6 +6,12 @@
  * depending on the scenario being rolled for (e.g. a "flanking" bonus only
  * counts on some attacks, not others), so the DM sees every mod that could
  * apply and manually checks the ones that do for this specific roll.
+ *
+ * The mod list is captured at roll time, so if the DM edits a skill or
+ * condition on the character card *after* rolling but before applying mods,
+ * the already-shown checklist goes stale. A "↻ Refresh" button re-fetches
+ * the mod list (keeping the already-rolled dice numbers) without requiring
+ * a brand-new roll.
  */
 
 export function rollDie(die) {
@@ -16,6 +22,37 @@ export function rollDie(die) {
 
 export function rollDice(diceArr) {
   return (diceArr || []).map(rollDie);
+}
+
+function renderModsBlock(mods, selected, onToggle, onRefresh) {
+  const modsLabelRow = `
+    <div class="roll-mods-header">
+      <span class="roll-mods-label">Tap any mods that apply to this roll:</span>
+      <button type="button" class="roll-refresh-mods-btn" title="Re-check mods if you changed something on the card">↻ Refresh</button>
+    </div>
+  `;
+
+  const body = mods.length
+    ? `<div class="roll-mods-list">
+         ${mods
+           .map(
+             (m, i) => `
+           <label class="roll-mod-chip${selected.has(i) ? ' is-selected' : ''}">
+             <input type="checkbox" data-mod-index="${i}" ${selected.has(i) ? 'checked' : ''} />
+             ${m.source} ${m.value >= 0 ? '+' : ''}${m.value}
+           </label>
+         `
+           )
+           .join('')}
+       </div>`
+    : `<div class="roll-line roll-line-dice">No mods currently available.</div>`;
+
+  return { html: modsLabelRow + body, wire: (el) => {
+    el.querySelector('.roll-refresh-mods-btn').addEventListener('click', onRefresh);
+    el.querySelectorAll('.roll-mod-chip input').forEach((cb) => {
+      cb.addEventListener('change', (e) => onToggle(Number(e.target.dataset.modIndex), e.target.checked));
+    });
+  }};
 }
 
 /**
@@ -42,42 +79,34 @@ export function attachDiceRoller(gridEl, resultEl, dice, getAvailableMods) {
 
       const rolls = rollDice(diceArr);
       const diceTotal = rolls.reduce((a, b) => a + b, 0);
-      const mods = getAvailableMods(label) || [];
-      const selected = new Set();
+      let mods = getAvailableMods(label) || [];
+      let selected = new Set();
+
+      function refreshMods() {
+        mods = getAvailableMods(label) || [];
+        selected = new Set();
+        renderResult();
+      }
 
       function renderResult() {
         const modTotal = mods.reduce((sum, m, i) => sum + (selected.has(i) ? m.value : 0), 0);
+        const modsBlock = renderModsBlock(
+          mods,
+          selected,
+          (idx, checked) => {
+            if (checked) selected.add(idx);
+            else selected.delete(idx);
+            renderResult();
+          },
+          refreshMods
+        );
 
         resultEl.innerHTML = `
           <div class="roll-line roll-line-title">${label}: <strong>${diceTotal + modTotal}</strong></div>
           <div class="roll-line roll-line-dice">Dice: [${rolls.join(' + ')}] = ${diceTotal}</div>
-          ${
-            mods.length
-              ? `<div class="roll-mods-label">Tap any mods that apply to this roll:</div>
-                 <div class="roll-mods-list">
-                   ${mods
-                     .map(
-                       (m, i) => `
-                     <label class="roll-mod-chip${selected.has(i) ? ' is-selected' : ''}">
-                       <input type="checkbox" data-mod-index="${i}" ${selected.has(i) ? 'checked' : ''} />
-                       ${m.source} ${m.value >= 0 ? '+' : ''}${m.value}
-                     </label>
-                   `
-                     )
-                     .join('')}
-                 </div>`
-              : `<div class="roll-line roll-line-dice">No mods available for this stat.</div>`
-          }
+          ${modsBlock.html}
         `;
-
-        resultEl.querySelectorAll('.roll-mod-chip input').forEach((cb) => {
-          cb.addEventListener('change', (e) => {
-            const idx = Number(e.target.dataset.modIndex);
-            if (e.target.checked) selected.add(idx);
-            else selected.delete(idx);
-            renderResult();
-          });
-        });
+        modsBlock.wire(resultEl);
       }
 
       renderResult();
@@ -94,7 +123,7 @@ const STANDARD_DICE = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'];
  * apply from a full unfiltered list (since the roll isn't tied to a named
  * stat, nothing can be auto-matched; the DM decides per roll).
  *
- * @param {Function} getAvailableMods - () => [{ source, value }], re-evaluated fresh on every Roll
+ * @param {Function} getAvailableMods - () => [{ source, value }], re-evaluated on every Roll and every Refresh
  */
 export function createDicePoolRoller(getAvailableMods) {
   const container = document.createElement('div');
@@ -149,42 +178,34 @@ export function createDicePoolRoller(getAvailableMods) {
 
     const rolls = pool.map(rollDie);
     const diceTotal = rolls.reduce((a, b) => a + b, 0);
-    const mods = getAvailableMods() || [];
-    const selected = new Set();
+    let mods = getAvailableMods() || [];
+    let selected = new Set();
+
+    function refreshMods() {
+      mods = getAvailableMods() || [];
+      selected = new Set();
+      renderResult();
+    }
 
     function renderResult() {
       const modTotal = mods.reduce((sum, m, i) => sum + (selected.has(i) ? m.value : 0), 0);
+      const modsBlock = renderModsBlock(
+        mods,
+        selected,
+        (idx, checked) => {
+          if (checked) selected.add(idx);
+          else selected.delete(idx);
+          renderResult();
+        },
+        refreshMods
+      );
 
       resultEl.innerHTML = `
         <div class="roll-line roll-line-title">Total: <strong>${diceTotal + modTotal}</strong></div>
         <div class="roll-line roll-line-dice">Dice: [${pool.map((d, i) => `${d}=${rolls[i]}`).join(', ')}] = ${diceTotal}</div>
-        ${
-          mods.length
-            ? `<div class="roll-mods-label">Tap any mods/skills/conditions that apply:</div>
-               <div class="roll-mods-list">
-                 ${mods
-                   .map(
-                     (m, i) => `
-                   <label class="roll-mod-chip${selected.has(i) ? ' is-selected' : ''}">
-                     <input type="checkbox" data-mod-index="${i}" ${selected.has(i) ? 'checked' : ''} />
-                     ${m.source} ${m.value >= 0 ? '+' : ''}${m.value}
-                   </label>
-                 `
-                   )
-                   .join('')}
-               </div>`
-            : `<div class="roll-line roll-line-dice">This character has no numeric mods/skills/conditions to apply.</div>`
-        }
+        ${modsBlock.html}
       `;
-
-      resultEl.querySelectorAll('.roll-mod-chip input').forEach((cb) => {
-        cb.addEventListener('change', (e) => {
-          const idx = Number(e.target.dataset.modIndex);
-          if (e.target.checked) selected.add(idx);
-          else selected.delete(idx);
-          renderResult();
-        });
-      });
+      modsBlock.wire(resultEl);
     }
 
     renderResult();

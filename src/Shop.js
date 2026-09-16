@@ -1,6 +1,7 @@
 // src/Shop.js
 
 import { fromCopper, formatPurse } from './currency.js';
+import { createLibraryItemPicker } from './libraryItemPicker.js';
 import { showModal } from './modal.js';
 
 /**
@@ -115,53 +116,25 @@ export function createShopView(shop, handlers = {}) {
       return;
     }
 
-    librarySection.innerHTML = `
-      <h4>Add from Library</h4>
-      <input type="text" class="shop-library-search" placeholder="Search items..." />
-      <div class="shop-library-results"></div>
-    `;
-
-    const searchInput = librarySection.querySelector('.shop-library-search');
-    const resultsEl = librarySection.querySelector('.shop-library-results');
-
-    function renderResults(query) {
-      const q = query.trim().toLowerCase();
-      const matches = q ? items.filter((i) => i.item.toLowerCase().includes(q)) : items.slice(0, 20);
-
-      resultsEl.innerHTML = matches.length
-        ? matches
-            .map(
-              (i, idx) => `
-          <div class="shop-library-row">
-            <span class="item-name">${i.item}</span>
-            <span class="item-price">${formatPurse(fromCopper(i.priceInCopper || 0))}</span>
-            <button class="shop-add-library-btn" data-index="${idx}">+ Add</button>
-          </div>
-        `
-            )
-            .join('')
-        : `<p class="bp-empty">No matches.</p>`;
-
-      resultsEl.querySelectorAll('.shop-add-library-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const libItem = matches[Number(btn.dataset.index)];
-          if (shop.inventory.some((s) => s.item === libItem.item)) {
-            showModal('Already Listed', `${libItem.item} is already in this shop's inventory.`);
-            return;
+    librarySection.innerHTML = '<h4>Add from Library</h4>';
+    const picker = createLibraryItemPicker(
+      getLibraryItems,
+      (itemsToAdd) => {
+        itemsToAdd.forEach((libItem) => {
+          if (!shop.inventory.some((s) => s.item === libItem.item)) {
+            shop.inventory.push({
+              item: libItem.item,
+              priceInCopper: libItem.priceInCopper || 0,
+              description: libItem.description
+            });
           }
-          shop.inventory.push({
-            item: libItem.item,
-            priceInCopper: libItem.priceInCopper || 0,
-            description: libItem.description
-          });
-          renderList();
-          notify();
         });
-      });
-    }
-
-    renderResults('');
-    searchInput.addEventListener('input', () => renderResults(searchInput.value));
+        renderList();
+        notify();
+      },
+      (itemName) => shop.inventory.some((s) => s.item === itemName)
+    );
+    librarySection.appendChild(picker);
   }
 
   renderLibrarySection();

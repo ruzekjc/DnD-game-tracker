@@ -1373,3 +1373,99 @@ body {
   font-size: 0.85rem;
   opacity: 0.85;
 }
+
+/* --- Dice roll mods refresh --- */
+
+.roll-mods-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  gap: 8px;
+}
+.roll-mods-header .roll-mods-label { margin: 0; }
+
+.roll-refresh-mods-btn {
+  border: 1px solid #5a4a7a;
+  border-radius: 6px;
+  background: #3a3050;
+  color: #f0e6ff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.8rem;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+.roll-refresh-mods-btn:hover { background: #6b4fa0; border-color: #7d5cbb; }
+
+/* --- Shared library item picker --- */
+
+.library-picker-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  border: 1px solid #5a4a7a;
+  background: #3a3050;
+  color: #f0e6ff;
+  font-family: inherit;
+}
+
+.library-picker-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.library-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #3a3050;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.library-picker-row .item-name { flex: 1; }
+.library-picker-row.is-disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.library-picker-already {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.library-picker-add-btn {
+  width: 100%;
+  padding: 8px;
+}
+.library-picker-add-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* --- New shop modal --- */
+
+.new-shop-box {
+  max-width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.ns-selected-summary {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin: 8px 0 12px 0;
+}
+.ns-create-btn {
+  width: 100%;
+  padding: 10px;
+  font-size: 1rem;
+}

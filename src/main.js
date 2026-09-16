@@ -7,6 +7,7 @@ import { initGoogleSignIn, getCurrentUser, signOut } from './auth.js';
 import { normalizeExp } from './progression.js';
 import { initResizablePanels } from './resizablePanels.js';
 import { showNewCharacterModal } from './newCharacterModal.js';
+import { showNewShopModal } from './newShopModal.js';
 import { showModal } from './modal.js';
 
 // --- Validation ---
@@ -89,6 +90,11 @@ function reportImportErrors(records, typeLabel) {
   const warnings = records.filter((r) => r.saveWarning);
   warnings.forEach((r) => showModal('Heads up', r.saveWarning));
   return records.filter((r) => !r.error);
+}
+
+function currentOwnerEmail() {
+  const user = getCurrentUser();
+  return user ? user.email : null;
 }
 
 // --- Characters ---
@@ -237,7 +243,7 @@ async function handleImportCharacters() {
     );
     if (isNew) {
       addCharacterRecord(record);
-      rememberHandle('character', record);
+      rememberHandle('character', record, currentOwnerEmail());
     } else {
       // Same character re-imported (matched by id) — rebuild its card from
       // the freshly-imported data instead of adding a duplicate.
@@ -283,7 +289,7 @@ function handleCreateCharacter() {
     }
 
     addCharacterRecord(record);
-    rememberHandle('character', record);
+    rememberHandle('character', record, currentOwnerEmail());
 
     const newIndex = characterEntries.findIndex((e) => e.record === record);
     if (newIndex !== -1) goToCharacter(newIndex);
@@ -305,11 +311,55 @@ async function handleImportShops() {
   const validRecords = reportImportErrors(records, 'shop');
   validRecords.forEach((record) => {
     const { isNew } = upsertRecord(shopRecords, record);
-    if (isNew) rememberHandle('shop', record);
+    if (isNew) rememberHandle('shop', record, currentOwnerEmail());
   });
 
   if (shopEnemyPanel) shopEnemyPanel.refreshOptions();
   if (bottomPanel) bottomPanel.refreshOptions();
+}
+
+function handleCreateShop() {
+  showNewShopModal(getLibraryItems, async (shopData) => {
+    shopData.id = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    const suggestedName = `${shopData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`;
+
+    let handle = null;
+    try {
+      handle = await pickSaveLocation(suggestedName);
+    } catch (err) {
+      showModal('Save Picker Failed', err.message || String(err));
+    }
+
+    const record = {
+      id: shopData.id,
+      handle,
+      name: handle ? handle.name : suggestedName,
+      data: shopData,
+      backup: JSON.parse(JSON.stringify(shopData))
+    };
+
+    const result = await saveRecord(record);
+    if (!result.ok) {
+      showModal('Save Failed', `Couldn't save the new shop: ${result.error}`);
+    } else if (result.downloaded) {
+      showModal(
+        'Shop Created (Download)',
+        `${shopData.name} was downloaded as ${record.name} — your browser doesn't support saving directly to a chosen location, so move that file wherever you keep your shop files.`
+      );
+    }
+
+    upsertRecord(shopRecords, record);
+    rememberHandle('shop', record, currentOwnerEmail());
+
+    if (shopEnemyPanel) {
+      shopEnemyPanel.refreshOptions();
+      shopEnemyPanel.selectShop(record);
+    }
+    if (bottomPanel) bottomPanel.refreshOptions();
+  });
 }
 
 async function handleImportEnemies() {
@@ -325,7 +375,7 @@ async function handleImportEnemies() {
   const validRecords = reportImportErrors(records, 'enemy');
   validRecords.forEach((record) => {
     const { isNew } = upsertRecord(enemyRecords, record);
-    if (isNew) rememberHandle('enemy', record);
+    if (isNew) rememberHandle('enemy', record, currentOwnerEmail());
   });
 
   if (shopEnemyPanel) shopEnemyPanel.refreshOptions();
@@ -352,7 +402,7 @@ async function handleImportLibrary() {
   const validRecords = reportImportErrors(records, 'item library');
   validRecords.forEach((record) => {
     const { isNew } = upsertRecord(libraryRecords, record);
-    if (isNew) rememberHandle('library', record);
+    if (isNew) rememberHandle('library', record, currentOwnerEmail());
   });
 
   if (shopEnemyPanel) shopEnemyPanel.refreshOptions();
@@ -384,7 +434,7 @@ async function handleImportTierTemplates() {
   const validRecords = reportImportErrors(records, 'tier template');
   validRecords.forEach((record) => {
     const { isNew } = upsertRecord(tierTemplateRecords, record);
-    if (isNew) rememberHandle('tierTemplate', record);
+    if (isNew) rememberHandle('tierTemplate', record, currentOwnerEmail());
   });
 
   if (shopEnemyPanel) shopEnemyPanel.refreshOptions();
@@ -429,27 +479,45 @@ async function handleReconnect(charEntries, shopEntries, enemyEntries, libraryEn
 }
 
 async function checkForRememberedSession() {
+  const owner = currentOwnerEmail();
   const [chars, shops, enemies, library, tierTemplates] = await Promise.all([
-    getRememberedHandles('character'),
-    getRememberedHandles('shop'),
-    getRememberedHandles('enemy'),
-    getRememberedHandles('library'),
-    getRememberedHandles('tierTemplate')
+    getRememberedHandles('character', owner),
+    getRememberedHandles('shop', owner),
+    getRememberedHandles('enemy', owner),
+    getRememberedHandles('library', owner),
+    getRememberedHandles('tierTemplate', owner)
   ]);
   const total = chars.length + shops.length + enemies.length + library.length + tierTemplates.length;
-  if (!total) return;
 
   const banner = document.getElementById('reconnect-banner');
   if (!banner) return;
 
+  if (!total) {
+    banner.style.display = 'none';
+    return;
+  }
+
   banner.style.display = 'flex';
-  banner.querySelector('.reconnect-count').textContent = `${total} file(s) from last session`;
-  banner.querySelector('.reconnect-btn').addEventListener(
+  banner.querySelector('.reconnect-count').textContent = owner
+    ? `Welcome back — ${total} file(s) from your last session`
+    : `${total} file(s) from last session`;
+
+  // This function can run again after sign-in (to re-scope to that DM's own
+  // files), so swap in fresh buttons rather than stacking listeners on the
+  // same ones across multiple calls.
+  const reconnectBtn = banner.querySelector('.reconnect-btn');
+  const dismissBtn = banner.querySelector('.reconnect-dismiss-btn');
+  const freshReconnectBtn = reconnectBtn.cloneNode(true);
+  const freshDismissBtn = dismissBtn.cloneNode(true);
+  reconnectBtn.replaceWith(freshReconnectBtn);
+  dismissBtn.replaceWith(freshDismissBtn);
+
+  freshReconnectBtn.addEventListener(
     'click',
     () => handleReconnect(chars, shops, enemies, library, tierTemplates),
     { once: true }
   );
-  banner.querySelector('.reconnect-dismiss-btn').addEventListener(
+  freshDismissBtn.addEventListener(
     'click',
     () => { banner.style.display = 'none'; },
     { once: true }
@@ -472,12 +540,16 @@ function renderDmStatus(user) {
     `;
     document.getElementById('dm-signout-btn').addEventListener('click', () => {
       signOut();
-      renderDmStatus(null);
+      renderDmStatus(null); // its own tail call re-scopes the reconnect banner
       btnContainer.style.display = '';
     });
   } else {
     statusEl.innerHTML = '';
   }
+
+  // Re-scope the reconnect banner to whichever DM (or nobody) is now signed
+  // in — a different account shouldn't see another DM's remembered files.
+  checkForRememberedSession();
 }
 
 // --- Init ---
@@ -526,6 +598,7 @@ function init() {
       onImportLibrary: handleImportLibrary,
       getTierTemplate,
       onImportTierTemplates: handleImportTierTemplates,
+      onNewShop: handleCreateShop,
       onShopChanged: () => {
         if (bottomPanel) bottomPanel.refreshOptions();
       }
