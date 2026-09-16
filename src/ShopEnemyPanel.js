@@ -18,7 +18,11 @@ import { showModal } from './modal.js';
  *
  * @param {Array} shopRecords
  * @param {Array} enemyRecords
- * @param {Object} handlers - { onImportShop, onImportEnemy } — each () => Promise, called when Import is clicked
+ * @param {Object} handlers - { onImportShop, onImportEnemy, getLibraryItems, onImportLibrary, onShopChanged }
+ *   onImportShop/onImportEnemy/onImportLibrary are each () => Promise, called
+ *   when the relevant Import action is clicked. getLibraryItems() returns
+ *   the current flattened master item list for Shop's "Add from Library"
+ *   search. onShopChanged(shop) fires whenever a shop's inventory is edited.
  */
 export function createShopEnemyPanel(shopRecords, enemyRecords, handlers = {}) {
   const container = document.createElement('div');
@@ -64,7 +68,14 @@ export function createShopEnemyPanel(shopRecords, enemyRecords, handlers = {}) {
 
     const view =
       mode === 'shop'
-        ? createShopView(record.data)
+        ? createShopView(record.data, {
+            onChange: () => {
+              if (handlers.onShopChanged) handlers.onShopChanged(record.data);
+            },
+            onSaveRequest: () => handleSave(record),
+            getLibraryItems: handlers.getLibraryItems,
+            onImportLibrary: handlers.onImportLibrary
+          })
         : createEnemyView(record.data, null, () => handleSave(record));
     content.appendChild(view);
   }

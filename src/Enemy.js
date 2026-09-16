@@ -1,6 +1,8 @@
 // src/Enemy.js
 
 import { createConditionsList } from './ConditionsList.js';
+import { attachDiceRoller } from './diceRoller.js';
+import { getEnemyModBreakdown } from './mods.js';
 
 const TIER_LABELS = {
   basic: 'Basic',
@@ -9,9 +11,9 @@ const TIER_LABELS = {
 };
 
 /**
- * Renders an enemy stat block: dice, tier badge, mods (read-only for now —
- * actual mod stacking into rolls is a Dice Roller phase concern), and a
- * shared conditions list matching how character conditions will work.
+ * Renders an enemy stat block: clickable dice (rolls + a manual mod
+ * checklist, same as characters — see diceRoller.js), a static mods summary
+ * for quick reference, and a shared conditions list.
  *
  * @param {Object} enemy - { name, tier, dice, mods, conditions }
  * @param {Function} [onChange] - fired when conditions change
@@ -52,13 +54,14 @@ export function createEnemyView(enemy, onChange, onSaveRequest) {
       ${Object.entries(dice).map(([label, diceArr]) => {
         const display = (!diceArr || diceArr.length === 0) ? 'N/A' : diceArr.join(' + ');
         return `
-          <div class="stat">
+          <button class="stat stat-roll-btn" data-stat="${label}" type="button">
             <span class="stat-label">${label}</span>
             <span class="stat-die">${display}</span>
-          </div>
+          </button>
         `;
       }).join('')}
     </div>
+    <div class="roll-result" style="display: none;"></div>
   `;
   container.appendChild(statSection);
 
@@ -92,6 +95,10 @@ export function createEnemyView(enemy, onChange, onSaveRequest) {
   );
   conditionsSection.appendChild(conditionsEl);
   container.appendChild(conditionsSection);
+
+  const diceGridEl = statSection.querySelector('.dice-grid');
+  const rollResultEl = statSection.querySelector('.roll-result');
+  attachDiceRoller(diceGridEl, rollResultEl, dice, (statLabel) => getEnemyModBreakdown(enemy, statLabel));
 
   return container;
 }

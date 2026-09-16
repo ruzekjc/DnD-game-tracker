@@ -1,30 +1,33 @@
 // src/BottomPanel.js
 
 import { toCopper, fromCopper, formatPurse, spend, addFunds } from './currency.js';
-import { getModBreakdown } from './Mods.js';
+import { createDicePoolRoller } from './diceRoller.js';
+import { getAllModSources } from './mods.js';
+import { createTradeTab } from './Trade.js';
+import { addExp, normalizeExp } from './progression.js';
+import { showLevelUpModal } from './levelUpModal.js';
 import { showModal } from './modal.js';
 
 /**
- * The bottom panel: a character selector shared across two tabs.
+ * The bottom panel: three tabs.
+ *  - Inventory: browse a shop, stage a cart, Buy/Return against the
+ *    currently-selected character.
+ *  - Dice Roller: free-form dice pool (click any mix of standard dice,
+ *    Roll), then manually pick which of the selected character's
+ *    mods/skills/conditions apply to the total. Nothing auto-applies since
+ *    the same roll can call for different mods depending on the scenario.
+ *  - Trade: two-sided trade cart, independent of the character selector
+ *    above (it has its own two party pickers) — see Trade.js.
  *
- * Inventory tab: browse a shop, stage a cart, Buy (deducts wallet, adds to
- * character inventory, shop stock stays unlimited), and Return an owned item
- * back to a shop (reverse of buy — refunds the shop's listed price if that
- * item is found there, otherwise just removes it, since not every owned item
- * necessarily came from the currently-selected shop).
- *
- * Dice Roller tab: click a stat to roll its dice. If no character is
- * selected, rolling is blocked with a popup rather than silently failing.
- *
- * @param {Array} characterEntries - [{ character, cardInventoryEl, cardPurseEl }]
- *   cardInventoryEl/cardPurseEl are the DOM elements returned by
- *   createInventoryList/createPurseEditor for that character's card, used to
- *   keep the card's own display in sync after a buy/return here.
+ * @param {Array} characterEntries - [{ character, cardPurseEl }]
  * @param {Array} shopRecords - loaded + validated shop records (see dataStore.js);
  *   shared by reference with main.js, which pushes newly-imported shops onto
  *   this same array and calls refreshOptions() to pick them up.
+ * @param {Function} [onExpChange] - (character) => void, called whenever the
+ *   EXP tab changes a character's exp/level/skillPoints/skills, so main.js
+ *   can rebuild that character's card to reflect it.
  */
-export function createBottomPanel(characterEntries, shopRecords) {
+export function createBottomPanel(characterEntries, shopRecords, onExpChange) {
   const container = document.createElement('div');
   container.className = 'bottom-panel';
 
@@ -39,6 +42,8 @@ export function createBottomPanel(characterEntries, shopRecords) {
       <div class="bottom-panel-tabs">
         <button class="tab-btn bp-inventory-tab is-active">Inventory</button>
         <button class="tab-btn bp-dice-tab">Dice Roller</button>
+        <button class="tab-btn bp-trade-tab">Trade</button>
+        <button class="tab-btn bp-exp-tab">EXP</button>
       </div>
     </div>
     <div class="bottom-panel-content"></div>
@@ -47,7 +52,17 @@ export function createBottomPanel(characterEntries, shopRecords) {
   const charSelect = container.querySelector('.bp-character-select');
   const inventoryTabBtn = container.querySelector('.bp-inventory-tab');
   const diceTabBtn = container.querySelector('.bp-dice-tab');
+  const tradeTabBtn = container.querySelector('.bp-trade-tab');
+  const expTabBtn = container.querySelector('.bp-exp-tab');
   const content = container.querySelector('.bottom-panel-content');
+
+  // Created once so state (queued dice, staged trade offers) survives tab
+  // switches — only their DOM is moved in/out of `content`, never rebuilt.
+  const diceRoller = createDicePoolRoller(() => {
+    const entry = getSelectedEntry();
+    return entry ? getAllModSources(entry.character) : [];
+  });
+  const tradeTab = createTradeTab(characterEntries, shopRecords);
 
   function populateCharSelect() {
     charSelect.innerHTML = characterEntries.length
@@ -61,13 +76,15 @@ export function createBottomPanel(characterEntries, shopRecords) {
   }
 
   function syncCardUI(entry) {
-    if (entry.cardInventoryEl && entry.cardInventoryEl.refresh) entry.cardInventoryEl.refresh();
     if (entry.cardPurseEl && entry.cardPurseEl.refresh) entry.cardPurseEl.refresh();
   }
 
   function render() {
     content.innerHTML = '';
-    content.appendChild(mode === 'inventory' ? renderInventoryTab() : renderDiceTab());
+    if (mode === 'inventory') content.appendChild(renderInventoryTab());
+    else if (mode === 'dice') content.appendChild(renderDiceTab());
+    else if (mode === 'trade') content.appendChild(tradeTab.element);
+    else content.appendChild(renderExpTab());
   }
 
   // ---------- Inventory tab ----------
@@ -170,20 +187,51 @@ export function createBottomPanel(characterEntries, shopRecords) {
       ownedItemsEl.innerHTML = '';
       if (!character.inventory.length) {
         ownedItemsEl.innerHTML = `<p class="bp-empty">No items.</p>`;
-        return;
       }
       character.inventory.forEach((invItem, i) => {
         const row = document.createElement('div');
         row.className = 'bp-owned-item-row';
         row.innerHTML = `
-          <span class="item-name">${invItem.item} x${invItem.qty}</span>
+          <span class="item-name">${invItem.item}</span>
+          <div class="qty-controls">
+            <button class="qty-btn minus">−</button>
+            <span class="qty-value">${invItem.qty}</span>
+            <button class="qty-btn plus">+</button>
+          </div>
           <button class="bp-return-btn">↩ Return</button>
         `;
+
+        row.querySelector('.minus').addEventListener('click', () => {
+          invItem.qty -= 1;
+          if (invItem.qty <= 0) character.inventory.splice(i, 1);
+          renderOwnedItems();
+        });
+        row.querySelector('.plus').addEventListener('click', () => {
+          invItem.qty += 1;
+          renderOwnedItems();
+        });
         row.querySelector('.bp-return-btn').addEventListener('click', () => {
           returnItem(invItem, i);
         });
+
         ownedItemsEl.appendChild(row);
       });
+
+      const addRow = document.createElement('div');
+      addRow.className = 'inventory-add-row';
+      addRow.innerHTML = `
+        <input type="text" class="new-item-input" placeholder="New item name..." />
+        <button class="add-item-btn">+ Add</button>
+      `;
+      addRow.querySelector('.add-item-btn').addEventListener('click', () => {
+        const input = addRow.querySelector('.new-item-input');
+        const name = input.value.trim();
+        if (name) {
+          character.inventory.push({ item: name, qty: 1 });
+          renderOwnedItems();
+        }
+      });
+      ownedItemsEl.appendChild(addRow);
     }
 
     function returnItem(invItem, index) {
@@ -236,101 +284,94 @@ export function createBottomPanel(characterEntries, shopRecords) {
   }
 
   // ---------- Dice Roller tab ----------
-  function rollDie(die) {
-    const sides = Number(String(die).toLowerCase().replace('d', '')) || 0;
-    if (!sides) return 0;
-    return Math.floor(Math.random() * sides) + 1;
-  }
-
   function renderDiceTab() {
     const wrap = document.createElement('div');
     wrap.className = 'bp-dice-tab-content';
 
     const entry = getSelectedEntry();
     if (!entry) {
-      wrap.innerHTML = `<p class="bp-empty">Select a character to roll their stats.</p>`;
+      wrap.innerHTML = `<p class="bp-empty">Select a character to roll for them.</p>`;
+      return wrap;
+    }
+
+    wrap.appendChild(diceRoller.element);
+    return wrap;
+  }
+
+  // ---------- EXP tab ----------
+  function renderExpTab() {
+    const wrap = document.createElement('div');
+    wrap.className = 'bp-exp-tab-content';
+
+    const entry = getSelectedEntry();
+    if (!entry) {
+      wrap.innerHTML = `<p class="bp-empty">Select a character to grant EXP.</p>`;
       return wrap;
     }
 
     const character = entry.character;
-    const dice = character.dice || {};
+    normalizeExp(character);
 
     wrap.innerHTML = `
-      <div class="bp-dice-grid"></div>
-      <div class="bp-roll-result">Click a stat to roll.</div>
+      <div class="bp-exp-status">${character.name}: Level ${character.level || 1} — ${character.exp.value} / ${character.exp.cap} EXP</div>
+      <div class="bp-exp-buttons">
+        <button class="bp-exp-btn" data-fraction="0.25">+25%</button>
+        <button class="bp-exp-btn" data-fraction="0.5">+50%</button>
+        <button class="bp-exp-btn" data-fraction="0.75">+75%</button>
+        <button class="bp-exp-btn" data-fraction="1">+100%</button>
+      </div>
+      <p class="bp-exp-note">
+        Each button adds that percentage of the total EXP needed to level up
+        (currently ${character.exp.cap}), regardless of current progress — and they stack,
+        so +25% then +50% adds 75% total.
+      </p>
     `;
 
-    const grid = wrap.querySelector('.bp-dice-grid');
-    const resultEl = wrap.querySelector('.bp-roll-result');
-
-    if (!Object.keys(dice).length) {
-      grid.innerHTML = `<p class="bp-empty">No dice defined for this character.</p>`;
-      return wrap;
-    }
-
-    Object.entries(dice).forEach(([label, diceArr]) => {
-      const btn = document.createElement('button');
-      btn.className = 'bp-stat-roll-btn';
-      btn.textContent = label;
+    wrap.querySelectorAll('.bp-exp-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        // Guarded even though the UI only shows buttons once a character is
-        // selected — keeps the "no character selected" rule enforced at the
-        // action itself, not just at render time.
-        if (!getSelectedEntry()) {
-          showModal('No Character Selected', 'Select a character before rolling.');
-          return;
-        }
-        if (!diceArr || !diceArr.length) {
-          resultEl.textContent = `${label}: no dice defined.`;
-          return;
-        }
+        const fraction = Number(btn.dataset.fraction);
+        const amount = Math.round(character.exp.cap * fraction);
+        const levelsGained = addExp(character, amount);
 
-        const rolls = diceArr.map(rollDie);
-        const diceTotal = rolls.reduce((a, b) => a + b, 0);
+        if (onExpChange) onExpChange(character);
+        render();
 
-        // Mod stacking: race + occupation + personal skills matching this
-        // stat, plus any active conditions targeting it, all add together.
-        const breakdown = getModBreakdown(character, label);
-        const modTotal = breakdown.reduce((sum, b) => sum + b.value, 0);
-        const grandTotal = diceTotal + modTotal;
-
-        const modsLine = breakdown.length
-          ? breakdown.map((b) => `${b.source} ${b.value >= 0 ? '+' : ''}${b.value}`).join(', ')
-          : 'none';
-
-        resultEl.innerHTML = `
-          <strong>${label}: ${grandTotal}</strong><br>
-          Dice: [${rolls.join(' + ')}] = ${diceTotal}<br>
-          Mods: ${modsLine}
-        `;
+        if (levelsGained > 0) queueLevelUps(character, levelsGained);
       });
-      grid.appendChild(btn);
     });
 
     return wrap;
   }
 
+  function queueLevelUps(character, count) {
+    if (count <= 0) return;
+    showLevelUpModal(character, () => {
+      if (onExpChange) onExpChange(character);
+      queueLevelUps(character, count - 1);
+    });
+  }
+
   // ---------- Wiring ----------
   charSelect.addEventListener('change', () => {
     selectedCharIndex = charSelect.value === '' ? -1 : Number(charSelect.value);
+    diceRoller.resetResult();
     render();
   });
 
-  inventoryTabBtn.addEventListener('click', () => {
-    if (mode === 'inventory') return;
-    mode = 'inventory';
-    inventoryTabBtn.classList.add('is-active');
-    diceTabBtn.classList.remove('is-active');
+  function switchMode(newMode) {
+    if (mode === newMode) return;
+    mode = newMode;
+    inventoryTabBtn.classList.toggle('is-active', mode === 'inventory');
+    diceTabBtn.classList.toggle('is-active', mode === 'dice');
+    tradeTabBtn.classList.toggle('is-active', mode === 'trade');
+    expTabBtn.classList.toggle('is-active', mode === 'exp');
     render();
-  });
+  }
 
-  diceTabBtn.addEventListener('click', () => {
-    if (mode === 'dice') return;
-    mode = 'dice';
-    diceTabBtn.classList.add('is-active');
-    inventoryTabBtn.classList.remove('is-active');
-    render();
-  });
+  inventoryTabBtn.addEventListener('click', () => switchMode('inventory'));
+  diceTabBtn.addEventListener('click', () => switchMode('dice'));
+  tradeTabBtn.addEventListener('click', () => switchMode('trade'));
+  expTabBtn.addEventListener('click', () => switchMode('exp'));
 
   populateCharSelect();
   render();
@@ -348,6 +389,17 @@ export function createBottomPanel(characterEntries, shopRecords) {
     refreshOptions() {
       if (selectedCharIndex === -1 && characterEntries.length) selectedCharIndex = 0;
       if (selectedShopIndex === -1 && shopRecords.length) selectedShopIndex = 0;
+      populateCharSelect();
+      tradeTab.refreshOptions();
+      render();
+    },
+    // Called by main.js's character panel navigation, so both selectors
+    // point at the same character instead of drifting independently.
+    selectCharacter(character) {
+      const index = characterEntries.findIndex((e) => e.character === character);
+      if (index === -1) return;
+      selectedCharIndex = index;
+      diceRoller.resetResult();
       populateCharSelect();
       render();
     }

@@ -1,6 +1,6 @@
 // src/currency.js
 
-const RATES = {
+export const RATES = {
   platinum: 1_000_000,
   gold: 10_000,
   silver: 100,

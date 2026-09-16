@@ -54,3 +54,53 @@ export function getModBreakdown(character, statLabel) {
 export function getTotalMod(character, statLabel) {
   return getModBreakdown(character, statLabel).reduce((sum, entry) => sum + entry.value, 0);
 }
+
+/**
+ * Same idea as getModBreakdown, but for enemies: their mods are a flat
+ * { stat, value } list rather than named skills, so matching is direct
+ * rather than by shared naming with dice labels.
+ */
+export function getEnemyModBreakdown(enemy, statLabel) {
+  const breakdown = [];
+  const target = statLabel.toLowerCase();
+
+  (enemy.mods || [])
+    .filter((m) => (m.stat || '').toLowerCase() === target)
+    .forEach((m) => breakdown.push({ source: 'Mod', value: Number(m.value) || 0 }));
+
+  (enemy.conditions || [])
+    .filter(
+      (c) =>
+        c.active &&
+        Number(c.value) &&
+        (!c.appliesTo || c.appliesTo.toLowerCase() === target)
+    )
+    .forEach((c) => breakdown.push({ source: c.name, value: Number(c.value) }));
+
+  return breakdown;
+}
+
+/**
+ * Every numeric mod/skill/condition a character has, with no stat filtering
+ * at all — used by the free-form dice pool roller, where the roll isn't
+ * tied to a named stat so nothing can be auto-matched. The DM sees
+ * everything and picks whatever applies to the scenario being rolled.
+ */
+export function getAllModSources(character) {
+  const list = [];
+
+  (character.racialSkills || []).forEach((s) => {
+    if (Number(s.value)) list.push({ source: `Race: ${s.name}`, value: Number(s.value) });
+  });
+  (character.occupationSkills || []).forEach((s) => {
+    if (Number(s.value)) list.push({ source: `Occupation: ${s.name}`, value: Number(s.value) });
+  });
+  (character.skills || []).forEach((s) => {
+    if (Number(s.value)) list.push({ source: `Skill: ${s.name}`, value: Number(s.value) });
+  });
+  (character.conditions || [])
+    .filter((c) => c.active && Number(c.value))
+    .forEach((c) => list.push({ source: `Condition: ${c.name}`, value: Number(c.value) }));
+
+  return list;
+}

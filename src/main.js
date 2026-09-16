@@ -1,9 +1,11 @@
 import { createCharacterCard } from './CharacterCard.js';
-import { createInventoryList } from './InventoryList.js';
 import { createShopEnemyPanel } from './ShopEnemyPanel.js';
 import { createBottomPanel } from './BottomPanel.js';
-import { pickAndImportFiles, upsertRecord, saveRecord, isFileSystemAccessSupported } from './dataStore.js';
+import { pickAndImportFiles, upsertRecord, saveRecord, isFileSystemAccessSupported, requestPermissionAndRead } from './dataStore.js';
+import { rememberHandle, getRememberedHandles } from './sessionStore.js';
 import { initGoogleSignIn, getCurrentUser, signOut } from './auth.js';
+import { normalizeExp } from './progression.js';
+import { initResizablePanels } from './resizablePanels.js';
 import { showModal } from './modal.js';
 
 // --- Validation ---
@@ -42,17 +44,26 @@ function validateEnemy(enemy) {
   return errors;
 }
 
+function validateItemLibrary(library) {
+  const errors = [];
+  if (!library || typeof library !== 'object') errors.push('file is not a valid JSON object');
+  else if (!Array.isArray(library.items)) errors.push('missing or invalid "items" array');
+  return errors;
+}
+
 // --- Module-level state ---
 // A single running session's worth of imported data. Records (not raw data)
 // so characters/shops/enemies can be saved back to their source file and
 // re-imports of the same file can be detected via `id`.
-const characterEntries = []; // [{ character, cardInventoryEl, cardPurseEl, cardEl, record }]
+const characterEntries = []; // [{ character, cardPurseEl, cardEl, record }]
 const shopRecords = [];
 const enemyRecords = [];
+const libraryRecords = []; // [{ data: { name, items: [{ item, priceInCopper, description }] } }]
 
-let container = null;
+let charDisplay = null; // holds exactly one character card at a time
 let bottomPanel = null;
 let shopEnemyPanel = null;
+let selectedCharacterIndex = -1;
 
 function notifyCharacterChanged(character) {
   if (bottomPanel) bottomPanel.refreshIfSelected(character);
@@ -72,35 +83,67 @@ function reportImportErrors(records, typeLabel) {
 }
 
 // --- Characters ---
+// Only ONE character card is ever in the DOM at a time — the panel is a
+// single-character viewer (with all their mods visible at once for rolling),
+// not a grid. Every card is still built and cached in characterEntries so
+// switching characters is instant and doesn't lose in-progress edits.
 
 function mountCharacterCard(record) {
   if (!record.data.inventory) record.data.inventory = [];
-
-  const inventoryEl = createInventoryList(record.data.inventory, (updatedItems) => {
-    record.data.inventory = updatedItems;
-    notifyCharacterChanged(record.data);
-  });
+  normalizeExp(record.data);
 
   const card = createCharacterCard(
     record.data,
-    inventoryEl,
     (updatedCharacter) => notifyCharacterChanged(updatedCharacter),
     () => handleSaveCharacter(record)
   );
 
-  return { card, inventoryEl };
+  return { card };
+}
+
+function populateCharNav() {
+  const select = document.getElementById('char-select');
+  if (!select) return;
+  select.innerHTML = characterEntries.length
+    ? characterEntries.map((e, i) => `<option value="${i}">${e.character.name}</option>`).join('')
+    : `<option value="">No characters imported</option>`;
+  select.value = selectedCharacterIndex >= 0 ? String(selectedCharacterIndex) : '';
+}
+
+function renderCurrentCharacter() {
+  if (!charDisplay) return;
+  charDisplay.innerHTML = '';
+
+  const entry = characterEntries[selectedCharacterIndex];
+  if (!entry) {
+    charDisplay.innerHTML = '<p class="bp-empty">Import a character to get started.</p>';
+    return;
+  }
+
+  charDisplay.appendChild(entry.cardEl);
+  populateCharNav();
+  if (bottomPanel) bottomPanel.selectCharacter(entry.character);
+}
+
+function goToCharacter(index) {
+  if (!characterEntries.length) return;
+  const wrapped = ((index % characterEntries.length) + characterEntries.length) % characterEntries.length;
+  selectedCharacterIndex = wrapped;
+  renderCurrentCharacter();
 }
 
 function addCharacterRecord(record) {
-  const { card, inventoryEl } = mountCharacterCard(record);
-  container.appendChild(card);
+  const { card } = mountCharacterCard(record);
   characterEntries.push({
     character: record.data,
-    cardInventoryEl: inventoryEl,
     cardPurseEl: card.purseEl,
     cardEl: card,
     record
   });
+
+  if (selectedCharacterIndex === -1) selectedCharacterIndex = 0;
+  populateCharNav();
+  if (characterEntries.length === 1) renderCurrentCharacter();
   if (bottomPanel) bottomPanel.refreshOptions();
 }
 
@@ -108,19 +151,26 @@ function replaceCharacterCard(record) {
   const entryIndex = characterEntries.findIndex((e) => e.record === record);
   if (entryIndex === -1) return;
 
-  const oldEntry = characterEntries[entryIndex];
-  const { card, inventoryEl } = mountCharacterCard(record);
-  container.replaceChild(card, oldEntry.cardEl);
-
+  const { card } = mountCharacterCard(record);
   characterEntries[entryIndex] = {
     character: record.data,
-    cardInventoryEl: inventoryEl,
     cardPurseEl: card.purseEl,
     cardEl: card,
     record
   };
 
+  populateCharNav();
+  if (entryIndex === selectedCharacterIndex) renderCurrentCharacter();
   if (bottomPanel) bottomPanel.refreshIfSelected(record.data);
+}
+
+// EXP tab (in BottomPanel) mutates level/exp/skillPoints/skills directly on
+// the character object — those fields are baked into the card's markup at
+// creation, so the simplest correct fix is rebuilding the card from current
+// data, same as the save-rollback and re-import paths already do.
+function handleCharacterProgressionChanged(character) {
+  const entry = characterEntries.find((e) => e.character === character);
+  if (entry) replaceCharacterCard(entry.record);
 }
 
 function stampSaveAuthorship(record) {
@@ -176,6 +226,7 @@ async function handleImportCharacters() {
     );
     if (isNew) {
       addCharacterRecord(record);
+      rememberHandle('character', record);
     } else {
       // Same character re-imported (matched by id) — rebuild its card from
       // the freshly-imported data instead of adding a duplicate.
@@ -198,7 +249,10 @@ async function handleImportShops() {
   if (!records.length) return;
 
   const validRecords = reportImportErrors(records, 'shop');
-  validRecords.forEach((record) => upsertRecord(shopRecords, record));
+  validRecords.forEach((record) => {
+    const { isNew } = upsertRecord(shopRecords, record);
+    if (isNew) rememberHandle('shop', record);
+  });
 
   if (shopEnemyPanel) shopEnemyPanel.refreshOptions();
   if (bottomPanel) bottomPanel.refreshOptions();
@@ -215,9 +269,103 @@ async function handleImportEnemies() {
   if (!records.length) return;
 
   const validRecords = reportImportErrors(records, 'enemy');
-  validRecords.forEach((record) => upsertRecord(enemyRecords, record));
+  validRecords.forEach((record) => {
+    const { isNew } = upsertRecord(enemyRecords, record);
+    if (isNew) rememberHandle('enemy', record);
+  });
 
   if (shopEnemyPanel) shopEnemyPanel.refreshOptions();
+}
+
+// --- Item Library ---
+// A master catalog of items (name + base price + description) shops can
+// pull from instead of the DM typing every item out by hand each time.
+
+function getLibraryItems() {
+  return libraryRecords.flatMap((r) => r.data.items || []);
+}
+
+async function handleImportLibrary() {
+  let records;
+  try {
+    records = await pickAndImportFiles(validateItemLibrary);
+  } catch (err) {
+    showModal('Import Failed', err.message || String(err));
+    return;
+  }
+  if (!records.length) return;
+
+  const validRecords = reportImportErrors(records, 'item library');
+  validRecords.forEach((record) => {
+    const { isNew } = upsertRecord(libraryRecords, record);
+    if (isNew) rememberHandle('library', record);
+  });
+
+  if (shopEnemyPanel) shopEnemyPanel.refreshOptions();
+}
+
+// --- Reconnect previous session ---
+
+async function reconnectGroup(entries, validate, onLoaded) {
+  for (const entry of entries) {
+    const result = await requestPermissionAndRead(entry.handle, validate);
+    if (result.error) {
+      showModal('Reconnect Failed', result.error);
+      continue;
+    }
+    onLoaded(result);
+  }
+}
+
+async function handleReconnect(charEntries, shopEntries, enemyEntries, libraryEntries) {
+  await reconnectGroup(charEntries, validateCharacter, (record) => {
+    const { isNew, index } = upsertRecord(
+      characterEntries.map((e) => e.record),
+      record
+    );
+    if (isNew) addCharacterRecord(record);
+    else {
+      characterEntries[index].record = record;
+      replaceCharacterCard(record);
+    }
+  });
+
+  await reconnectGroup(shopEntries, validateShop, (record) => upsertRecord(shopRecords, record));
+  await reconnectGroup(enemyEntries, validateEnemy, (record) => upsertRecord(enemyRecords, record));
+  await reconnectGroup(libraryEntries, validateItemLibrary, (record) => upsertRecord(libraryRecords, record));
+
+  if (shopEnemyPanel) shopEnemyPanel.refreshOptions();
+  if (bottomPanel) bottomPanel.refreshOptions();
+
+  const banner = document.getElementById('reconnect-banner');
+  if (banner) banner.style.display = 'none';
+}
+
+async function checkForRememberedSession() {
+  const [chars, shops, enemies, library] = await Promise.all([
+    getRememberedHandles('character'),
+    getRememberedHandles('shop'),
+    getRememberedHandles('enemy'),
+    getRememberedHandles('library')
+  ]);
+  const total = chars.length + shops.length + enemies.length + library.length;
+  if (!total) return;
+
+  const banner = document.getElementById('reconnect-banner');
+  if (!banner) return;
+
+  banner.style.display = 'flex';
+  banner.querySelector('.reconnect-count').textContent = `${total} file(s) from last session`;
+  banner.querySelector('.reconnect-btn').addEventListener(
+    'click',
+    () => handleReconnect(chars, shops, enemies, library),
+    { once: true }
+  );
+  banner.querySelector('.reconnect-dismiss-btn').addEventListener(
+    'click',
+    () => { banner.style.display = 'none'; },
+    { once: true }
+  );
 }
 
 // --- DM auth (identity only — see auth.js) ---
@@ -247,16 +395,28 @@ function renderDmStatus(user) {
 // --- Init ---
 
 function init() {
-  container = document.getElementById('app');
+  charDisplay = document.getElementById('char-display');
   const shopEnemyContainer = document.getElementById('shop-enemy-app');
   const bottomPanelContainer = document.getElementById('bottom-panel-app');
+
+  initResizablePanels();
 
   const importCharactersBtn = document.getElementById('import-characters-btn');
   if (importCharactersBtn) {
     importCharactersBtn.addEventListener('click', handleImportCharacters);
   }
 
+  const charSelect = document.getElementById('char-select');
+  const charPrevBtn = document.getElementById('char-prev-btn');
+  const charNextBtn = document.getElementById('char-next-btn');
+  if (charSelect) charSelect.addEventListener('change', () => goToCharacter(Number(charSelect.value)));
+  if (charPrevBtn) charPrevBtn.addEventListener('click', () => goToCharacter(selectedCharacterIndex - 1));
+  if (charNextBtn) charNextBtn.addEventListener('click', () => goToCharacter(selectedCharacterIndex + 1));
+
+  renderCurrentCharacter();
+
   initGoogleSignIn('google-signin-btn', renderDmStatus);
+  checkForRememberedSession();
 
   if (!isFileSystemAccessSupported()) {
     showModal(
@@ -268,7 +428,12 @@ function init() {
   if (shopEnemyContainer) {
     shopEnemyPanel = createShopEnemyPanel(shopRecords, enemyRecords, {
       onImportShop: handleImportShops,
-      onImportEnemy: handleImportEnemies
+      onImportEnemy: handleImportEnemies,
+      getLibraryItems,
+      onImportLibrary: handleImportLibrary,
+      onShopChanged: () => {
+        if (bottomPanel) bottomPanel.refreshOptions();
+      }
     });
     shopEnemyContainer.appendChild(shopEnemyPanel.element);
   } else {
@@ -276,7 +441,7 @@ function init() {
   }
 
   if (bottomPanelContainer) {
-    bottomPanel = createBottomPanel(characterEntries, shopRecords);
+    bottomPanel = createBottomPanel(characterEntries, shopRecords, handleCharacterProgressionChanged);
     bottomPanelContainer.appendChild(bottomPanel.element);
   } else {
     console.warn('No #bottom-panel-app container found — skipping bottom panel.');

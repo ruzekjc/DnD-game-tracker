@@ -12,12 +12,27 @@
   <div class="dm-bar">
     <div id="google-signin-btn"></div>
     <div id="dm-status" class="dm-status"></div>
+    <div id="reconnect-banner" class="reconnect-banner" style="display: none;">
+      <span class="reconnect-count"></span>
+      <button class="reconnect-btn import-btn">Reconnect</button>
+      <button class="reconnect-dismiss-btn import-btn">Dismiss</button>
+    </div>
   </div>
   <div class="app-layout">
     <div id="app">
-      <button id="import-characters-btn" class="import-btn full-span">+ Import Characters</button>
+      <div class="char-panel-toolbar">
+        <button id="import-characters-btn" class="import-btn">+ Import</button>
+        <div class="char-nav">
+          <button id="char-prev-btn" class="nav-arrow-btn" type="button">←</button>
+          <select id="char-select"></select>
+          <button id="char-next-btn" class="nav-arrow-btn" type="button">→</button>
+        </div>
+      </div>
+      <div id="char-display"></div>
     </div>
+    <div id="resizer-vertical" class="resizer resizer-vertical"></div>
     <div id="shop-enemy-app"></div>
+    <div id="resizer-horizontal" class="resizer resizer-horizontal"></div>
     <div id="bottom-panel-app"></div>
   </div>
   <script type="module" src="./src/main.js"></script>

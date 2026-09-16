@@ -47,17 +47,19 @@ body {
   font-style: italic;
 }
 
-/* Locked three-panel layout: characters (scrolls internally) + a fixed-size
-   shop/enemy sidebar (does not resize when its tabs switch) on top, a full-
-   width bottom panel underneath. */
+/* Three-panel layout with draggable dividers: characters (scrolls
+   internally) + a resizable shop/enemy sidebar (fixed size while a tab is
+   open — dragging the handle is the only thing that resizes it) on top, a
+   resizable full-width bottom panel underneath. Sizes are CSS custom
+   properties set by resizablePanels.js and persisted per-browser. */
 .app-layout {
   display: grid;
-  grid-template-columns: 1fr 360px;
-  grid-template-rows: 1fr auto;
+  grid-template-columns: 1fr 10px var(--sidebar-width, 360px);
+  grid-template-rows: 1fr 10px var(--bottom-height, 340px);
   grid-template-areas:
-    "characters shop"
-    "bottom     bottom";
-  gap: 24px;
+    "characters resizer-v shop"
+    "resizer-h  resizer-h resizer-h"
+    "bottom     bottom    bottom";
   max-width: 1900px;
   flex: 1;
   min-height: 0;
@@ -65,15 +67,95 @@ body {
   margin: 0 auto;
 }
 
+.resizer {
+  position: relative;
+}
+.resizer-vertical {
+  grid-area: resizer-v;
+  cursor: col-resize;
+}
+.resizer-vertical::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 3px;
+  transform: translateX(-50%);
+  background: #5a4a7a;
+  border-radius: 2px;
+}
+.resizer-vertical:hover::after { background: #7d5cbb; }
+
+.resizer-horizontal {
+  grid-area: resizer-h;
+  cursor: row-resize;
+}
+.resizer-horizontal::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  background: #5a4a7a;
+  border-radius: 2px;
+}
+.resizer-horizontal:hover::after { background: #7d5cbb; }
+
 #app {
   grid-area: characters;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 24px;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* lets the flex child shrink so overflow-y can actually scroll */
+}
+
+.char-panel-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.char-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-arrow-btn {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #5a4a7a;
+  border-radius: 8px;
+  background: #3a3050;
+  color: #f0e6ff;
+  cursor: pointer;
+  font-size: 1rem;
+  font-family: inherit;
+}
+.nav-arrow-btn:hover { background: #6b4fa0; border-color: #7d5cbb; }
+
+#char-select {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #5a4a7a;
+  background: #3a3050;
+  color: #f0e6ff;
+  font-family: inherit;
+  min-width: 160px;
+}
+
+#char-display {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  min-height: 0; /* lets the grid track shrink so overflow-y can actually scroll */
-  padding-right: 4px;
+  display: flex;
+  justify-content: center;
 }
 
 #shop-enemy-app {
@@ -84,6 +166,8 @@ body {
 
 #bottom-panel-app {
   grid-area: bottom;
+  min-height: 0;
+  height: 100%;
 }
 
 @media (max-width: 1050px) {
@@ -96,65 +180,37 @@ body {
       "shop"
       "bottom";
     flex: none;
+    gap: 16px;
   }
+  .resizer { display: none; } /* nothing to drag in a stacked single-column layout */
   #app { overflow-y: visible; }
   #shop-enemy-app { height: 480px; }
+  #bottom-panel-app { height: 420px; }
 }
 
 .char-card {
-  width: 480px;
-  perspective: 1200px;
-}
-
-.char-card-inner {
-  position: relative;
   width: 100%;
-  transition: transform 0.6s, height 0.3s ease;
-  transform-style: preserve-3d;
-}
-
-.char-card.is-flipped .char-card-inner {
-  transform: rotateY(180deg);
-}
-
-.char-card-face {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  backface-visibility: hidden;
   border-radius: 12px;
   padding: 16px;
   box-sizing: border-box;
-  overflow-y: auto;
   background: #2b2438;
   color: #f0e6ff;
   border: 1px solid #5a4a7a;
 }
 
-.char-card-back {
-  transform: rotateY(180deg);
-}
-
 .card-name-bar {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 12px;
   margin-bottom: 12px;
+  position: relative;
 }
 
-.flip-btn {
-  padding: 6px 14px;
-  border: none;
-  border-radius: 6px;
-  background: #6b4fa0;
-  color: white;
-  cursor: pointer;
-  font-family: inherit;
+.card-name-bar .save-btn {
+  position: absolute;
+  right: 0;
 }
-.flip-btn:hover { background: #7d5cbb; }
 
 .card-name-toggle {
   margin: 0;
@@ -209,7 +265,7 @@ body {
 
 .dice-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
   gap: 8px;
 }
 
@@ -219,10 +275,59 @@ body {
   align-items: center;
   background: #3a3050;
   border-radius: 6px;
-  padding: 6px;
+  padding: 8px;
+}
+.stat-roll-btn {
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  color: #f0e6ff;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.stat-roll-btn:hover {
+  background: #6b4fa0;
+  border-color: #7d5cbb;
 }
 .stat-label { font-size: 0.7rem; opacity: 0.7; }
 .stat-die { font-size: 0.7rem; opacity: 0.7; }
+
+.roll-result {
+  margin-top: 12px;
+  background: #241d30;
+  border: 1px solid #5a4a7a;
+  border-radius: 8px;
+  padding: 12px;
+}
+.roll-line { margin: 2px 0; }
+.roll-line-title { font-size: 1.1rem; }
+.roll-line-dice { opacity: 0.8; font-size: 0.9rem; }
+.roll-mods-label {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+.roll-mods-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.roll-mod-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid #5a4a7a;
+  background: #3a3050;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.roll-mod-chip.is-selected {
+  background: #6b4fa0;
+  border-color: #7d5cbb;
+}
 
 .edit-field {
   display: flex;
@@ -324,7 +429,7 @@ body {
 .qty-btn:hover { background: #7d5cbb; }
 .qty-value { min-width: 20px; text-align: center; font-weight: bold; }
 
-.inventory-add-row { display: flex; gap: 8px; margin-top: 8px; }
+.inventory-add-row { display: flex; gap: 8px; margin-top: 8px; flex-basis: 100%; }
 .new-item-input {
   flex: 1;
   padding: 6px 8px;
@@ -343,7 +448,7 @@ body {
 }
 .add-item-btn:hover { background: #7d5cbb; }
 
-.skills-list { display: flex; flex-direction: column; gap: 8px; }
+.skills-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .skill-row {
   display: flex;
   justify-content: space-between;
@@ -351,6 +456,7 @@ body {
   background: #3a3050;
   border-radius: 6px;
   padding: 8px 12px;
+  flex: 1 1 200px;
 }
 .skill-value { min-width: 30px; text-align: center; font-weight: bold; }
 
@@ -538,7 +644,7 @@ body {
 
 .conditions-list {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .condition-row {
@@ -551,6 +657,7 @@ body {
   opacity: 0.55;
   transition: opacity 0.15s ease, border-color 0.15s ease;
   border: 1px solid transparent;
+  flex: 1 1 260px;
 }
 .condition-row.is-active {
   opacity: 1;
@@ -600,14 +707,25 @@ body {
   padding: 16px;
   box-sizing: border-box;
   color: #f0e6ff;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* locked size regardless of which tab is open */
 }
 
 .bottom-panel-header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 16px;
   margin-bottom: 16px;
   flex-wrap: wrap;
+}
+
+.bottom-panel-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .bp-character-select {
@@ -792,3 +910,365 @@ body {
   flex-wrap: wrap;
   gap: 8px;
 }
+
+.reconnect-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+.reconnect-count { opacity: 0.8; }
+
+/* --- Dice pool roller (Bottom Panel Dice Roller tab) --- */
+
+.dice-pool-label {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin-bottom: 8px;
+}
+
+.dice-pool-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.dice-pool-btn {
+  padding: 10px 16px;
+  border: 1px solid #5a4a7a;
+  border-radius: 8px;
+  background: #3a3050;
+  color: #f0e6ff;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: bold;
+}
+.dice-pool-btn:hover { background: #6b4fa0; border-color: #7d5cbb; }
+
+.dice-pool-current {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  min-height: 30px;
+}
+
+.dice-pool-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #7d5cbb;
+  background: rgba(183, 156, 240, 0.15);
+  color: #f0e6ff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.dice-pool-chip:hover { background: rgba(183, 156, 240, 0.3); }
+
+.dice-pool-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+/* --- Trade tab --- */
+
+.trade-columns {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.trade-arrow {
+  font-size: 1.5rem;
+  opacity: 0.6;
+  align-self: center;
+}
+
+.trade-column {
+  background: #241d30;
+  border: 1px solid #5a4a7a;
+  border-radius: 8px;
+  padding: 12px;
+}
+.trade-column h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.9rem;
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.trade-party-select {
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  border: 1px solid #5a4a7a;
+  background: #3a3050;
+  color: #f0e6ff;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.trade-wallet {
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+  opacity: 0.9;
+}
+
+.trade-offer-label,
+.trade-available-label {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  margin: 8px 0 4px 0;
+}
+
+.trade-offer-list,
+.trade-available-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.trade-offer-row,
+.trade-available-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #3a3050;
+  border-radius: 6px;
+  padding: 6px 10px;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.trade-remove-offer-btn,
+.trade-remove-currency-btn,
+.trade-add-item-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 3px 8px;
+  color: white;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.trade-add-item-btn { background: #6b4fa0; }
+.trade-add-item-btn:hover { background: #7d5cbb; }
+.trade-remove-offer-btn,
+.trade-remove-currency-btn { background: #9d4a4a; }
+.trade-remove-offer-btn:hover,
+.trade-remove-currency-btn:hover { background: #b55c5c; }
+
+.trade-currency-add {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.trade-currency-input {
+  width: 70px;
+  background: rgba(183, 156, 240, 0.12);
+  border: 1px solid #7d5cbb;
+  color: #f0e6ff;
+  font-family: inherit;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+.trade-currency-denom {
+  background: rgba(183, 156, 240, 0.12);
+  border: 1px solid #7d5cbb;
+  color: #f0e6ff;
+  font-family: inherit;
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.trade-confirm-btn {
+  margin-top: 16px;
+  width: 100%;
+  padding: 10px;
+  font-size: 1rem;
+}
+
+@media (max-width: 700px) {
+  .trade-columns { grid-template-columns: 1fr; }
+  .trade-arrow { display: none; }
+}
+
+/* --- EXP tab --- */
+
+.bp-exp-status {
+  font-size: 1.05rem;
+  font-weight: bold;
+  margin-bottom: 12px;
+}
+
+.bp-exp-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.bp-exp-btn {
+  padding: 10px 18px;
+  border: 1px solid #5a4a7a;
+  border-radius: 8px;
+  background: #3a3050;
+  color: #f0e6ff;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: bold;
+}
+.bp-exp-btn:hover { background: #6b4fa0; border-color: #7d5cbb; }
+
+.bp-exp-note {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  max-width: 480px;
+}
+
+/* --- Level-up popup --- */
+
+.level-up-box {
+  max-width: 480px;
+}
+
+.level-up-body p {
+  margin-top: 0;
+}
+
+.level-up-choice {
+  margin-bottom: 14px;
+  padding: 10px;
+  border: 1px solid #4a3d66;
+  border-radius: 8px;
+}
+
+.level-up-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.level-up-existing-select,
+.level-up-new-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #5a4a7a;
+  background: #3a3050;
+  color: #f0e6ff;
+  font-family: inherit;
+}
+
+.level-up-confirm-btn {
+  width: 100%;
+  padding: 10px;
+  font-size: 1rem;
+}
+
+/* --- Shop editing (inventory rows, library search) --- */
+
+.shop-inventory-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.shop-item-price-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.shop-item-price-input {
+  width: 70px;
+  background: rgba(183, 156, 240, 0.12);
+  border: 1px solid #7d5cbb;
+  color: #f0e6ff;
+  font-family: inherit;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+.shop-item-price-unit {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.shop-remove-item-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 3px 8px;
+  color: white;
+  cursor: pointer;
+  font-family: inherit;
+  background: #9d4a4a;
+  font-size: 0.85rem;
+}
+.shop-remove-item-btn:hover { background: #b55c5c; }
+
+.shop-library-section {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #4a3d66;
+}
+.shop-library-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.shop-library-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  border: 1px solid #5a4a7a;
+  background: #3a3050;
+  color: #f0e6ff;
+  font-family: inherit;
+}
+
+.shop-library-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.shop-library-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #3a3050;
+  border-radius: 6px;
+  padding: 6px 10px;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.shop-add-library-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 3px 8px;
+  color: white;
+  cursor: pointer;
+  font-family: inherit;
+  background: #6b4fa0;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.shop-add-library-btn:hover { background: #7d5cbb; }

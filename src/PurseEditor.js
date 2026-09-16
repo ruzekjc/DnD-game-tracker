@@ -1,6 +1,4 @@
-import { toCopper, fromCopper, formatPurse } from './currency.js';
-
-const DENOM_RATES = { platinum: 1_000_000, gold: 10_000, silver: 100, copper: 1 };
+import { toCopper, fromCopper, formatPurse, RATES } from './currency.js';
 
 export function createPurseEditor(coinPouch, onChange) {
   const container = document.createElement('div');
@@ -30,7 +28,7 @@ export function createPurseEditor(coinPouch, onChange) {
       if (!amount || amount <= 0) return;
 
       const denom = denomSelect.value;
-      const deltaCopper = amount * DENOM_RATES[denom] * sign;
+      const deltaCopper = amount * RATES[denom] * sign;
 
       const currentCopper = toCopper(coinPouch);
       const newCopper = Math.max(0, currentCopper + deltaCopper); // never go negative

@@ -119,6 +119,26 @@ function pickWithFileInput(validate) {
 }
 
 /**
+ * Re-reads a previously-remembered handle (see sessionStore.js) — requests
+ * permission again (required after a reload, browsers don't persist write
+ * access across sessions) and rebuilds a record from its current content.
+ */
+export async function requestPermissionAndRead(handle, validate) {
+  let permission;
+  try {
+    permission = await handle.requestPermission({ mode: 'readwrite' });
+  } catch (err) {
+    return { error: `${handle.name}: ${err.message || err}` };
+  }
+  if (permission !== 'granted') {
+    return { error: `${handle.name}: permission not granted` };
+  }
+
+  const file = await handle.getFile();
+  return buildRecord(file, await file.text(), validate, handle);
+}
+
+/**
  * Opens a file picker (native or fallback), reads + validates every picked
  * file, and returns an array of records — or { error } entries for files
  * that failed to parse/validate, so the caller can show those separately.

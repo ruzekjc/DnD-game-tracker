@@ -3,7 +3,14 @@ import { createPurseEditor } from './PurseEditor.js';
 import { createConditionsList } from './ConditionsList.js';
 import { showModal } from './modal.js';
 
-export function createCharacterCard(character, inventoryElement, onCharacterChange, onSaveRequest) {
+/**
+ * Renders a character sheet — single view, no flip. Inventory management
+ * moved entirely to the bottom panel (buy/return/trade all happen there),
+ * so this card only covers the sheet itself: identity, dice, conditions,
+ * skills, level/EXP, and wallet (quick manual add/spend, separate from the
+ * bottom panel's shop-driven transactions).
+ */
+export function createCharacterCard(character, onCharacterChange, onSaveRequest) {
   const card = document.createElement('div');
   card.className = 'char-card';
 
@@ -14,89 +21,75 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
   }
 
   card.innerHTML = `
-    <div class="char-card-inner">
-      <div class="char-card-face char-card-front">
-        <div class="card-name-bar">
-          <button class="flip-btn">Inventory →</button>
-          <h2 class="card-name-toggle">${character.name}</h2>
-          ${onSaveRequest ? '<button class="save-btn">💾 Save</button>' : ''}
-        </div>
+    <div class="card-name-bar">
+      <h2 class="card-name-toggle">${character.name}</h2>
+      ${onSaveRequest ? '<button class="save-btn">💾 Save</button>' : ''}
+    </div>
 
-        <div class="card-body">
-          <div class="card-header">
-            <p class="char-title">${character.title || ''}</p>
-            <p class="char-subtitle">
-              ${character.race} —
-              <span class="clickable-name" data-occupation>${character.occupation}</span>
-            </p>
-          </div>
+    <div class="card-body">
+      <div class="card-header">
+        <p class="char-title">${character.title || ''}</p>
+        <p class="char-subtitle">
+          ${character.race} —
+          <span class="clickable-name" data-occupation>${character.occupation}</span>
+        </p>
+      </div>
 
-          <div class="section backstory-section">
-            <h3>Backstory</h3>
-            <p class="backstory-text">${character.backstory}</p>
-            <button class="expand-btn">Expand</button>
-          </div>
+      <div class="section backstory-section">
+        <h3>Backstory</h3>
+        <p class="backstory-text">${character.backstory}</p>
+        <button class="expand-btn">Expand</button>
+      </div>
 
-          <div class="section" data-race-section></div>
-          <div class="section" data-character-section></div>
-          <div class="section" data-occupation-section></div>
+      <div class="section" data-race-section></div>
+      <div class="section" data-character-section></div>
+      <div class="section" data-occupation-section></div>
 
-          <div class="section">
-            <h3>Dice</h3>
-            <div class="dice-grid">
-              ${Object.entries(dice).map(([label, diceArr]) => {
-                const display = (!diceArr || diceArr.length === 0) ? 'N/A' : diceArr.join(' + ');
-                return `
-                  <div class="stat">
-                    <span class="stat-label">${label}</span>
-                    <span class="stat-die">${display}</span>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-          </div>
-
-          <div class="section">
-            <h3>Conditions</h3>
-            <div class="conditions-slot"></div>
-          </div>
-
-          <div class="section">
-            <h3>Skills</h3>
-            <div class="skills-slot"></div>
-            <label class="edit-field">
-              Skill Points:
-              <input type="number" class="skillpoints-input" value="${character.skillPoints ?? 0}" />
-            </label>
-          </div>
-
-          <div class="section level-row">
-            <div><strong>Level:</strong> ${character.level}</div>
-            <div class="exp-editor">
-              <strong>EXP:</strong>
-              <input type="number" class="exp-value-input" value="${character.exp?.value ?? 0}" />
-              <span>/</span>
-              <input type="number" class="exp-cap-input" value="${character.exp?.cap ?? 100}" />
-            </div>
-          </div>
+      <div class="section">
+        <h3>Dice</h3>
+        <div class="dice-grid">
+          ${Object.entries(dice).map(([label, diceArr]) => {
+            const display = (!diceArr || diceArr.length === 0) ? 'N/A' : diceArr.join(' + ');
+            return `
+              <div class="stat">
+                <span class="stat-label">${label}</span>
+                <span class="stat-die">${display}</span>
+              </div>
+            `;
+          }).join('')}
         </div>
       </div>
 
-      <div class="char-card-face char-card-back">
-        <div class="card-name-bar">
-          <button class="flip-btn">← Sheet</button>
-          <h2 class="card-name-toggle">${character.name}'s Inventory</h2>
-        </div>
+      <div class="section">
+        <h3>Conditions</h3>
+        <div class="conditions-slot"></div>
+      </div>
 
-        <div class="card-body">
-          <div class="purse-slot"></div>
-          <div class="inventory-slot"></div>
+      <div class="section">
+        <h3>Skills</h3>
+        <div class="skills-slot"></div>
+        <label class="edit-field">
+          Skill Points:
+          <input type="number" class="skillpoints-input" value="${character.skillPoints ?? 0}" />
+        </label>
+      </div>
+
+      <div class="section level-row">
+        <div><strong>Level:</strong> ${character.level}</div>
+        <div class="exp-editor">
+          <strong>EXP:</strong>
+          <input type="number" class="exp-value-input" value="${character.exp?.value ?? 0}" />
+          <span>/</span>
+          <input type="number" class="exp-cap-input" value="${character.exp?.cap ?? 100}" />
         </div>
+      </div>
+
+      <div class="section">
+        <h3>Wallet</h3>
+        <div class="purse-slot"></div>
       </div>
     </div>
   `;
-
-  card.querySelector('.inventory-slot').appendChild(inventoryElement);
 
   // --- Clickable ability/passive helper (name + description objects) ---
   function createClickableRow(label, data) {
@@ -196,16 +189,7 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
     notify();
   });
   card.querySelector('.purse-slot').appendChild(purseEl);
-  card.purseEl = purseEl;
-  card.inventoryEl = inventoryElement; // exposed so main.js/BottomPanel can trigger refreshes after external edits
-
-  // --- Flip behavior ---
-  card.querySelectorAll('.flip-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      card.classList.toggle('is-flipped');
-      syncCardHeight(card);
-    });
-  });
+  card.purseEl = purseEl; // exposed so main.js/BottomPanel can trigger a refresh after external edits (buy/trade)
 
   // --- Save ---
   const saveBtn = card.querySelector('.save-btn');
@@ -225,15 +209,11 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
   expandBtn.addEventListener('click', () => {
     backstoryText.classList.toggle('expanded');
     expandBtn.textContent = backstoryText.classList.contains('expanded') ? 'Collapse' : 'Expand';
-    syncCardHeight(card);
   });
 
-  // --- Collapse/expand whole card by clicking the name (either face) ---
-  card.querySelectorAll('.card-name-toggle').forEach(nameEl => {
-    nameEl.addEventListener('click', () => {
-      card.classList.toggle('is-collapsed');
-      syncCardHeight(card);
-    });
+  // --- Collapse/expand the whole sheet by clicking the name ---
+  card.querySelector('.card-name-toggle').addEventListener('click', () => {
+    card.classList.toggle('is-collapsed');
   });
 
   // --- Skill points / EXP ---
@@ -250,33 +230,5 @@ export function createCharacterCard(character, inventoryElement, onCharacterChan
     notify();
   });
 
-  const observer = new MutationObserver(() => syncCardHeight(card));
-  observer.observe(inventoryElement, { childList: true, subtree: true });
-  observer.observe(card.querySelector('.skills-slot'), { childList: true, subtree: true });
-  observer.observe(racialSkillsSlot, { childList: true, subtree: true });
-  observer.observe(occSkillsSlot, { childList: true, subtree: true });
-  observer.observe(conditionsSlot, { childList: true, subtree: true });
-
-  requestAnimationFrame(() => syncCardHeight(card));
-
   return card;
-}
-
-function syncCardHeight(card) {
-  const inner = card.querySelector('.char-card-inner');
-
-  if (card.classList.contains('is-collapsed')) {
-    const frontBar = card.querySelector('.char-card-front .card-name-bar');
-    const backBar = card.querySelector('.char-card-back .card-name-bar');
-    const tallest = Math.max(frontBar.scrollHeight, backBar.scrollHeight) + 32; // padding buffer
-    inner.style.height = `${tallest}px`;
-    card.style.height = `${tallest}px`;
-    return;
-  }
-
-  const front = card.querySelector('.char-card-front');
-  const back = card.querySelector('.char-card-back');
-  const tallest = Math.max(front.scrollHeight, back.scrollHeight);
-  inner.style.height = `${tallest}px`;
-  card.style.height = `${tallest}px`;
 }
