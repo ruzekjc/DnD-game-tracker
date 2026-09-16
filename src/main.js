@@ -1,11 +1,12 @@
 import { createCharacterCard } from './CharacterCard.js';
 import { createShopEnemyPanel } from './ShopEnemyPanel.js';
 import { createBottomPanel } from './BottomPanel.js';
-import { pickAndImportFiles, upsertRecord, saveRecord, isFileSystemAccessSupported, requestPermissionAndRead } from './dataStore.js';
+import { pickAndImportFiles, upsertRecord, saveRecord, isFileSystemAccessSupported, requestPermissionAndRead, pickSaveLocation } from './dataStore.js';
 import { rememberHandle, getRememberedHandles } from './sessionStore.js';
 import { initGoogleSignIn, getCurrentUser, signOut } from './auth.js';
 import { normalizeExp } from './progression.js';
 import { initResizablePanels } from './resizablePanels.js';
+import { showNewCharacterModal } from './newCharacterModal.js';
 import { showModal } from './modal.js';
 
 // --- Validation ---
@@ -51,6 +52,13 @@ function validateItemLibrary(library) {
   return errors;
 }
 
+function validateTierTemplates(data) {
+  const errors = [];
+  if (!data || typeof data !== 'object') errors.push('file is not a valid JSON object');
+  else if (!data.tiers || typeof data.tiers !== 'object') errors.push('missing "tiers" object');
+  return errors;
+}
+
 // --- Module-level state ---
 // A single running session's worth of imported data. Records (not raw data)
 // so characters/shops/enemies can be saved back to their source file and
@@ -59,6 +67,7 @@ const characterEntries = []; // [{ character, cardPurseEl, cardEl, record }]
 const shopRecords = [];
 const enemyRecords = [];
 const libraryRecords = []; // [{ data: { name, items: [{ item, priceInCopper, description }] } }]
+const tierTemplateRecords = []; // [{ data: { name, tiers: { basic: { dice, mods }, enforcer: { dice, mods } } } }]
 
 let charDisplay = null; // holds exactly one character card at a time
 let bottomPanel = null;
@@ -90,6 +99,8 @@ function reportImportErrors(records, typeLabel) {
 
 function mountCharacterCard(record) {
   if (!record.data.inventory) record.data.inventory = [];
+  if (!record.data.coinPouch) record.data.coinPouch = { platinum: 0, gold: 0, silver: 0, copper: 0 };
+  if (!record.data.level) record.data.level = 1;
   normalizeExp(record.data);
 
   const card = createCharacterCard(
@@ -236,6 +247,49 @@ async function handleImportCharacters() {
   });
 }
 
+function handleCreateCharacter() {
+  showNewCharacterModal(async (characterData) => {
+    characterData.id = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    const suggestedName = `${characterData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`;
+
+    let handle = null;
+    try {
+      handle = await pickSaveLocation(suggestedName);
+    } catch (err) {
+      showModal('Save Picker Failed', err.message || String(err));
+      // Continue anyway — the character still gets created in-memory, and
+      // Save later falls back to a download, same as everywhere else.
+    }
+
+    const record = {
+      id: characterData.id,
+      handle,
+      name: handle ? handle.name : suggestedName,
+      data: characterData,
+      backup: JSON.parse(JSON.stringify(characterData))
+    };
+
+    const result = await saveRecord(record);
+    if (!result.ok) {
+      showModal('Save Failed', `Couldn't save the new character: ${result.error}`);
+    } else if (result.downloaded) {
+      showModal(
+        'Character Created (Download)',
+        `${characterData.name} was downloaded as ${record.name} — your browser doesn't support saving directly to a chosen location, so move that file wherever you keep your character files.`
+      );
+    }
+
+    addCharacterRecord(record);
+    rememberHandle('character', record);
+
+    const newIndex = characterEntries.findIndex((e) => e.record === record);
+    if (newIndex !== -1) goToCharacter(newIndex);
+  });
+}
+
 // --- Shops & Enemies ---
 
 async function handleImportShops() {
@@ -304,6 +358,38 @@ async function handleImportLibrary() {
   if (shopEnemyPanel) shopEnemyPanel.refreshOptions();
 }
 
+// --- Enemy Tier Templates ---
+// Shared "flat stat sheet" for Basic/Enforcer enemies, per the spec — an
+// enemy of that tier can omit its own dice/mods entirely and inherit these
+// instead (see Enemy.js). Bosses never use templates.
+
+function getTierTemplate(tier) {
+  for (const record of tierTemplateRecords) {
+    const tiers = record.data.tiers || {};
+    if (tiers[tier]) return tiers[tier];
+  }
+  return null;
+}
+
+async function handleImportTierTemplates() {
+  let records;
+  try {
+    records = await pickAndImportFiles(validateTierTemplates);
+  } catch (err) {
+    showModal('Import Failed', err.message || String(err));
+    return;
+  }
+  if (!records.length) return;
+
+  const validRecords = reportImportErrors(records, 'tier template');
+  validRecords.forEach((record) => {
+    const { isNew } = upsertRecord(tierTemplateRecords, record);
+    if (isNew) rememberHandle('tierTemplate', record);
+  });
+
+  if (shopEnemyPanel) shopEnemyPanel.refreshOptions();
+}
+
 // --- Reconnect previous session ---
 
 async function reconnectGroup(entries, validate, onLoaded) {
@@ -317,7 +403,7 @@ async function reconnectGroup(entries, validate, onLoaded) {
   }
 }
 
-async function handleReconnect(charEntries, shopEntries, enemyEntries, libraryEntries) {
+async function handleReconnect(charEntries, shopEntries, enemyEntries, libraryEntries, tierTemplateEntries) {
   await reconnectGroup(charEntries, validateCharacter, (record) => {
     const { isNew, index } = upsertRecord(
       characterEntries.map((e) => e.record),
@@ -333,6 +419,7 @@ async function handleReconnect(charEntries, shopEntries, enemyEntries, libraryEn
   await reconnectGroup(shopEntries, validateShop, (record) => upsertRecord(shopRecords, record));
   await reconnectGroup(enemyEntries, validateEnemy, (record) => upsertRecord(enemyRecords, record));
   await reconnectGroup(libraryEntries, validateItemLibrary, (record) => upsertRecord(libraryRecords, record));
+  await reconnectGroup(tierTemplateEntries, validateTierTemplates, (record) => upsertRecord(tierTemplateRecords, record));
 
   if (shopEnemyPanel) shopEnemyPanel.refreshOptions();
   if (bottomPanel) bottomPanel.refreshOptions();
@@ -342,13 +429,14 @@ async function handleReconnect(charEntries, shopEntries, enemyEntries, libraryEn
 }
 
 async function checkForRememberedSession() {
-  const [chars, shops, enemies, library] = await Promise.all([
+  const [chars, shops, enemies, library, tierTemplates] = await Promise.all([
     getRememberedHandles('character'),
     getRememberedHandles('shop'),
     getRememberedHandles('enemy'),
-    getRememberedHandles('library')
+    getRememberedHandles('library'),
+    getRememberedHandles('tierTemplate')
   ]);
-  const total = chars.length + shops.length + enemies.length + library.length;
+  const total = chars.length + shops.length + enemies.length + library.length + tierTemplates.length;
   if (!total) return;
 
   const banner = document.getElementById('reconnect-banner');
@@ -358,7 +446,7 @@ async function checkForRememberedSession() {
   banner.querySelector('.reconnect-count').textContent = `${total} file(s) from last session`;
   banner.querySelector('.reconnect-btn').addEventListener(
     'click',
-    () => handleReconnect(chars, shops, enemies, library),
+    () => handleReconnect(chars, shops, enemies, library, tierTemplates),
     { once: true }
   );
   banner.querySelector('.reconnect-dismiss-btn').addEventListener(
@@ -406,6 +494,11 @@ function init() {
     importCharactersBtn.addEventListener('click', handleImportCharacters);
   }
 
+  const newCharacterBtn = document.getElementById('new-character-btn');
+  if (newCharacterBtn) {
+    newCharacterBtn.addEventListener('click', handleCreateCharacter);
+  }
+
   const charSelect = document.getElementById('char-select');
   const charPrevBtn = document.getElementById('char-prev-btn');
   const charNextBtn = document.getElementById('char-next-btn');
@@ -431,6 +524,8 @@ function init() {
       onImportEnemy: handleImportEnemies,
       getLibraryItems,
       onImportLibrary: handleImportLibrary,
+      getTierTemplate,
+      onImportTierTemplates: handleImportTierTemplates,
       onShopChanged: () => {
         if (bottomPanel) bottomPanel.refreshOptions();
       }

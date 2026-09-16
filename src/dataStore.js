@@ -139,6 +139,26 @@ export async function requestPermissionAndRead(handle, validate) {
 }
 
 /**
+ * Opens a native "Save As" picker for a brand-new file (used by new-character
+ * creation, not import) and returns the resulting writable handle — or null
+ * if the browser doesn't support it or the DM cancels the picker. A null
+ * return means the caller should fall back to an in-memory-only record that
+ * downloads on Save, same as the import fallback path.
+ */
+export async function pickSaveLocation(suggestedName) {
+  if (!isFileSystemAccessSupported() || !window.showSaveFilePicker) return null;
+  try {
+    return await window.showSaveFilePicker({
+      suggestedName,
+      types: [{ description: 'JSON files', accept: { 'application/json': ['.json'] } }]
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') return null;
+    throw err;
+  }
+}
+
+/**
  * Opens a file picker (native or fallback), reads + validates every picked
  * file, and returns an array of records — or { error } entries for files
  * that failed to parse/validate, so the caller can show those separately.

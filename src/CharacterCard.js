@@ -30,14 +30,14 @@ export function createCharacterCard(character, onCharacterChange, onSaveRequest)
       <div class="card-header">
         <p class="char-title">${character.title || ''}</p>
         <p class="char-subtitle">
-          ${character.race} —
-          <span class="clickable-name" data-occupation>${character.occupation}</span>
+          ${character.race || 'Unknown race'} —
+          <span class="clickable-name" data-occupation>${character.occupation || 'Unknown occupation'}</span>
         </p>
       </div>
 
       <div class="section backstory-section">
         <h3>Backstory</h3>
-        <p class="backstory-text">${character.backstory}</p>
+        <p class="backstory-text">${character.backstory || 'No backstory written yet.'}</p>
         <button class="expand-btn">Expand</button>
       </div>
 

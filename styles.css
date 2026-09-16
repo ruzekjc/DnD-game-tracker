@@ -1272,3 +1272,104 @@ body {
   white-space: nowrap;
 }
 .shop-add-library-btn:hover { background: #7d5cbb; }
+
+/* --- New character modal --- */
+
+.new-character-box {
+  max-width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.nc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+}
+
+.nc-field input,
+.nc-field textarea {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #5a4a7a;
+  background: #3a3050;
+  color: #f0e6ff;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.nc-row {
+  display: flex;
+  gap: 10px;
+}
+.nc-row .nc-field { flex: 1; }
+
+.nc-dice-section {
+  margin-bottom: 12px;
+}
+
+.nc-field-label {
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+  opacity: 0.85;
+}
+
+.nc-dice-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.nc-dice-row input {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #5a4a7a;
+  background: #3a3050;
+  color: #f0e6ff;
+  font-family: inherit;
+}
+
+.nc-remove-dice-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 3px 8px;
+  color: white;
+  cursor: pointer;
+  font-family: inherit;
+  background: #9d4a4a;
+}
+.nc-remove-dice-btn:hover { background: #b55c5c; }
+
+.nc-note {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.nc-error {
+  color: #f0a0a0;
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+}
+
+.nc-create-btn {
+  width: 100%;
+  padding: 10px;
+  font-size: 1rem;
+}
+
+/* --- Enemy tier template status --- */
+
+.enemy-template-section {
+  background: #241d30;
+  border: 1px solid #4a3d66;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.enemy-template-note {
+  margin: 0 0 8px 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}

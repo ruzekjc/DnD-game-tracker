@@ -10,20 +10,42 @@ const TIER_LABELS = {
   boss: 'Boss'
 };
 
+// Bosses are explicitly excluded from tier templates per the spec — their
+// stat blocks are meant to be unique/auto-generated, not shared.
+const TEMPLATE_ELIGIBLE_TIERS = ['basic', 'enforcer'];
+
 /**
  * Renders an enemy stat block: clickable dice (rolls + a manual mod
  * checklist, same as characters — see diceRoller.js), a static mods summary
  * for quick reference, and a shared conditions list.
  *
+ * Basic/Enforcer enemies can omit their own dice/mods entirely and inherit
+ * a shared tier template instead ("flat shared stat sheet" per the spec) —
+ * an enemy's own dice/mods, if present, always take priority over the
+ * template. Boss-tier enemies never use templates.
+ *
  * @param {Object} enemy - { name, tier, dice, mods, conditions }
  * @param {Function} [onChange] - fired when conditions change
  * @param {Function} [onSaveRequest] - fired when the Save button is clicked; omit to hide it
+ * @param {Object} [handlers] - { getTierTemplate, onImportTierTemplates }
+ *   getTierTemplate(tier) => { dice, mods } | null. onImportTierTemplates is
+ *   () => Promise, fired by the "+ Import Tier Templates" button.
  */
-export function createEnemyView(enemy, onChange, onSaveRequest) {
+export function createEnemyView(enemy, onChange, onSaveRequest, handlers = {}) {
+  const { getTierTemplate, onImportTierTemplates } = handlers;
   const container = document.createElement('div');
   container.className = 'enemy-view';
 
-  const dice = enemy.dice || {};
+  const usesTemplates = TEMPLATE_ELIGIBLE_TIERS.includes(enemy.tier);
+  const template = usesTemplates && getTierTemplate ? getTierTemplate(enemy.tier) : null;
+
+  const hasOwnDice = enemy.dice && Object.keys(enemy.dice).length;
+  const hasOwnMods = enemy.mods && enemy.mods.length;
+
+  const effectiveDice = hasOwnDice ? enemy.dice : (template && template.dice) || {};
+  const effectiveMods = hasOwnMods ? enemy.mods : (template && template.mods) || [];
+  const usingTemplate = usesTemplates && !hasOwnDice && !hasOwnMods && template;
+
   const tierLabel = TIER_LABELS[enemy.tier] || enemy.tier || 'Unknown';
 
   const header = document.createElement('div');
@@ -46,12 +68,36 @@ export function createEnemyView(enemy, onChange, onSaveRequest) {
     });
   }
 
+  // --- Tier template status (Basic/Enforcer only) ---
+  if (usesTemplates) {
+    const templateSection = document.createElement('div');
+    templateSection.className = 'section enemy-template-section';
+
+    const statusText = template
+      ? usingTemplate
+        ? `Using the shared "${tierLabel}" tier template — this enemy defines no stats of its own.`
+        : `A "${tierLabel}" tier template is loaded, but this enemy's own dice/mods override it.`
+      : `No tier template imported for "${tierLabel}" yet — this enemy needs its own dice/mods until one is.`;
+
+    templateSection.innerHTML = `
+      <p class="enemy-template-note">${statusText}</p>
+      ${onImportTierTemplates ? '<button class="import-btn enemy-import-template-btn">+ Import Tier Templates</button>' : ''}
+    `;
+
+    const importBtn = templateSection.querySelector('.enemy-import-template-btn');
+    if (importBtn) {
+      importBtn.addEventListener('click', () => onImportTierTemplates());
+    }
+
+    container.appendChild(templateSection);
+  }
+
   const statSection = document.createElement('div');
   statSection.className = 'section';
   statSection.innerHTML = `
     <h3>Stats</h3>
     <div class="dice-grid">
-      ${Object.entries(dice).map(([label, diceArr]) => {
+      ${Object.entries(effectiveDice).map(([label, diceArr]) => {
         const display = (!diceArr || diceArr.length === 0) ? 'N/A' : diceArr.join(' + ');
         return `
           <button class="stat stat-roll-btn" data-stat="${label}" type="button">
@@ -65,10 +111,10 @@ export function createEnemyView(enemy, onChange, onSaveRequest) {
   `;
   container.appendChild(statSection);
 
-  if (enemy.mods && enemy.mods.length) {
+  if (effectiveMods.length) {
     const modsSection = document.createElement('div');
     modsSection.className = 'section';
-    const modsText = enemy.mods
+    const modsText = effectiveMods
       .map((m) => `${m.stat} ${m.value >= 0 ? '+' : ''}${m.value}`)
       .join(', ');
     modsSection.innerHTML = `
@@ -91,14 +137,20 @@ export function createEnemyView(enemy, onChange, onSaveRequest) {
       enemy.conditions = updated;
       if (onChange) onChange(enemy);
     },
-    Object.keys(dice)
+    Object.keys(effectiveDice)
   );
   conditionsSection.appendChild(conditionsEl);
   container.appendChild(conditionsSection);
 
+  // effectiveEnemy shares enemy.conditions by reference (shallow spread),
+  // so condition toggles still mutate the real enemy object — only dice/mods
+  // are swapped in for the template fallback.
+  const effectiveEnemy = { ...enemy, dice: effectiveDice, mods: effectiveMods };
   const diceGridEl = statSection.querySelector('.dice-grid');
   const rollResultEl = statSection.querySelector('.roll-result');
-  attachDiceRoller(diceGridEl, rollResultEl, dice, (statLabel) => getEnemyModBreakdown(enemy, statLabel));
+  attachDiceRoller(diceGridEl, rollResultEl, effectiveDice, (statLabel) =>
+    getEnemyModBreakdown(effectiveEnemy, statLabel)
+  );
 
   return container;
 }
