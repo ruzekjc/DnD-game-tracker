@@ -7,6 +7,7 @@ import { createTradeTab } from './Trade.js';
 import { addExp, normalizeExp } from './progression.js';
 import { showLevelUpModal } from './levelUpModal.js';
 import { showModal } from './modal.js';
+import { parseQuickAdd } from './utils.js';
 
 /**
  * The bottom panel: three tabs.
@@ -220,16 +221,25 @@ export function createBottomPanel(characterEntries, shopRecords, onExpChange) {
       const addRow = document.createElement('div');
       addRow.className = 'inventory-add-row';
       addRow.innerHTML = `
-        <input type="text" class="new-item-input" placeholder="New item name..." />
+        <input type="text" class="new-item-input" placeholder="New item (e.g. Vials x30)..." />
         <button class="add-item-btn">+ Add</button>
       `;
-      addRow.querySelector('.add-item-btn').addEventListener('click', () => {
-        const input = addRow.querySelector('.new-item-input');
-        const name = input.value.trim();
-        if (name) {
-          character.inventory.push({ item: name, qty: 1 });
-          renderOwnedItems();
-        }
+      const newItemInput = addRow.querySelector('.new-item-input');
+
+      function commitAddItem() {
+        const raw = newItemInput.value.trim();
+        if (!raw) return;
+        const { name, amount } = parseQuickAdd(raw, 'qty');
+        const existing = character.inventory.find((i) => i.item === name);
+        if (existing) existing.qty += amount;
+        else character.inventory.push({ item: name, qty: amount });
+        newItemInput.value = '';
+        renderOwnedItems();
+      }
+
+      addRow.querySelector('.add-item-btn').addEventListener('click', commitAddItem);
+      newItemInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commitAddItem(); }
       });
       ownedItemsEl.appendChild(addRow);
     }

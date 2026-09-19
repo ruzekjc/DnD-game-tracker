@@ -47,3 +47,136 @@ export function makeHideable(contentEl, label = 'Details') {
   wrapper.appendChild(content);
   return wrapper;
 }
+
+/**
+ * Parses quick-add shorthand typed into a "new skill/item" input so the
+ * user can type a name and value/qty in one go and hit Enter, instead of
+ * adding then hunting for the +/- buttons.
+ *
+ *  - kind 'value' (skills, conditions): "Agility+2", "Stealth -3", "Luck+10"
+ *    -> { name: 'Agility', amount: 2 }. No recognized suffix -> amount 0.
+ *  - kind 'qty' (inventory items): "Vials x30", "ropex5", "Torch X 2"
+ *    -> { name: 'Vials', amount: 30 }. No recognized suffix -> amount 1
+ *    (matches the previous default of adding a new item at qty 1).
+ *
+ * Falls back to treating the whole input as the name when no suffix
+ * matches, so plain "Perception" or "Rope" still works exactly as before.
+ */
+export function parseQuickAdd(raw, kind) {
+  const text = (raw || '').trim();
+
+  if (kind === 'qty') {
+    const m = text.match(/^(.*?)\s*[xX]\s*(\d+)\s*$/);
+    if (m && m[1].trim()) {
+      return { name: m[1].trim(), amount: Math.max(1, parseInt(m[2], 10)) };
+    }
+    return { name: text, amount: 1 };
+  }
+
+  // kind === 'value' (default)
+  const m = text.match(/^(.*?)\s*([+-]\s*\d+)\s*$/);
+  if (m && m[1].trim()) {
+    return { name: m[1].trim(), amount: parseInt(m[2].replace(/\s+/g, ''), 10) };
+  }
+  return { name: text, amount: 0 };
+}
+
+/**
+ * Adds native HTML5 drag-and-drop reordering to a list of rows inside
+ * `container`, matched by `rowSelector`. Attach this ONCE right after the
+ * container is created (before the first render) — it uses event
+ * delegation via closest(), so it keeps working across re-renders even
+ * though row elements themselves get replaced each time.
+ *
+ * Rows should have `draggable = true` set only when reordering should be
+ * allowed (e.g. edit mode); rows without it simply won't fire dragstart.
+ *
+ * @param {HTMLElement} container
+ * @param {string} rowSelector - e.g. '.skill-row'
+ * @param {Array} array - the backing array to reorder in place
+ * @param {Function} onReorder - called with the reordered array so the
+ *   caller can re-render and fire its own onChange
+ */
+export function attachDragReorder(container, rowSelector, array, onReorder) {
+  let dragEl = null;
+  let dragIndex = -1;
+
+  function rows() {
+    return Array.from(container.querySelectorAll(rowSelector));
+  }
+
+  function clearIndicators() {
+    rows().forEach((r) => r.classList.remove('drag-over-before', 'drag-over-after'));
+  }
+
+  container.addEventListener('dragstart', (e) => {
+    const row = e.target.closest(rowSelector);
+    if (!row || !container.contains(row) || row.draggable !== true) return;
+    dragEl = row;
+    dragIndex = rows().indexOf(row);
+    row.classList.add('is-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(dragIndex)); } catch (_) { /* Safari */ }
+  });
+
+  container.addEventListener('dragover', (e) => {
+    if (!dragEl) return;
+    const row = e.target.closest(rowSelector);
+    if (!row || row === dragEl) return;
+    e.preventDefault();
+    const rect = row.getBoundingClientRect();
+    const before = (e.clientX - rect.left) < rect.width / 2;
+    clearIndicators();
+    row.classList.toggle('drag-over-before', before);
+    row.classList.toggle('drag-over-after', !before);
+  });
+
+  container.addEventListener('drop', (e) => {
+    if (!dragEl) return;
+    e.preventDefault();
+    const row = e.target.closest(rowSelector);
+    clearIndicators();
+
+    if (row && row !== dragEl) {
+      const list = rows();
+      const overIndex = list.indexOf(row);
+      const rect = row.getBoundingClientRect();
+      const before = (e.clientX - rect.left) < rect.width / 2;
+      let targetIndex = before ? overIndex : overIndex + 1;
+      if (dragIndex < targetIndex) targetIndex -= 1;
+
+      const [moved] = array.splice(dragIndex, 1);
+      array.splice(targetIndex, 0, moved);
+      onReorder(array);
+    }
+
+    if (dragEl) dragEl.classList.remove('is-dragging');
+    dragEl = null;
+    dragIndex = -1;
+  });
+
+  container.addEventListener('dragend', () => {
+    if (dragEl) dragEl.classList.remove('is-dragging');
+    clearIndicators();
+    dragEl = null;
+    dragIndex = -1;
+  });
+}
+
+/**
+ * Makes a set of "chip" rows (skills, conditions, etc.) all share the same
+ * fixed width — the minimum width that fits the widest one — so a wrapping
+ * row of mods lines up neatly no matter how many chips end up sharing a
+ * line. Call this after appending rows to the DOM (a requestAnimationFrame
+ * after render is usually easiest, so layout has settled).
+ *
+ * @param {HTMLElement[]} rowEls
+ */
+export function equalizeRowWidths(rowEls) {
+  if (!rowEls.length) return;
+  rowEls.forEach((r) => { r.style.width = ''; });
+  let max = 0;
+  rowEls.forEach((r) => { max = Math.max(max, r.getBoundingClientRect().width); });
+  const width = `${Math.ceil(max)}px`;
+  rowEls.forEach((r) => { r.style.width = width; });
+}

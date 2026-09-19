@@ -207,9 +207,12 @@ body {
   position: relative;
 }
 
-.card-name-bar .save-btn {
+.card-name-bar-actions {
   position: absolute;
   right: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .card-name-toggle {
@@ -219,6 +222,49 @@ body {
   transition: opacity 0.15s ease;
 }
 .card-name-toggle:hover { opacity: 0.8; }
+
+.edit-mode-btn {
+  padding: 6px 10px;
+  border: 1px solid #7d5cbb;
+  border-radius: 6px;
+  background: rgba(183, 156, 240, 0.12);
+  color: #f0e6ff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.edit-mode-btn:hover { background: rgba(183, 156, 240, 0.25); }
+.char-card.is-edit-mode .edit-mode-btn {
+  background: #6b4fa0;
+  border-color: #7d5cbb;
+}
+
+.close-card-btn {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: #9d4a4a;
+  color: white;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+.close-card-btn:hover { background: #b55c5c; }
+
+/* Edit-mode affordance: any inline-editable field gets a dashed outline
+   and text cursor only while the card is in edit mode, so view mode stays
+   visually clean. */
+.char-card.is-edit-mode .editable-field[contenteditable="true"] {
+  outline: 1px dashed #7d5cbb;
+  outline-offset: 2px;
+  cursor: text;
+  border-radius: 3px;
+}
+.char-card.is-edit-mode .editable-field[contenteditable="true"]:focus {
+  outline: 1px solid #b79cf0;
+  background: rgba(183, 156, 240, 0.08);
+}
 
 .char-card.is-collapsed .card-body {
   display: none;
@@ -414,7 +460,18 @@ body {
   padding: 8px 12px;
 }
 .item-name { font-size: 0.95rem; }
-.qty-controls { display: flex; align-items: center; gap: 8px; }
+
+/* Fixed-width grid (not flex) so the minus button, the value, and the plus
+   button always land in the same three columns across every row — skills,
+   conditions, and inventory items alike — instead of drifting based on how
+   many digits the value happens to have. */
+.qty-controls {
+  display: grid;
+  grid-template-columns: 26px 34px 26px;
+  align-items: center;
+  justify-items: center;
+  gap: 4px;
+}
 .qty-btn {
   width: 26px;
   height: 26px;
@@ -448,17 +505,45 @@ body {
 }
 .add-item-btn:hover { background: #7d5cbb; }
 
-.skills-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.skills-list { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
 .skill-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   background: #3a3050;
   border-radius: 6px;
   padding: 8px 12px;
-  flex: 1 1 200px;
+  /* Fixed, not flexible — JS (equalizeRowWidths) sets an explicit width
+     equal to the widest chip in the list, so every chip matches it exactly
+     no matter how many share a row. */
+  flex: 0 0 auto;
 }
+.skill-row[draggable="true"] { cursor: grab; }
+.skill-row.is-dragging { opacity: 0.4; }
+.skill-row.drag-over-before { box-shadow: inset 3px 0 0 #b79cf0; }
+.skill-row.drag-over-after { box-shadow: inset -3px 0 0 #b79cf0; }
 .skill-value { min-width: 30px; text-align: center; font-weight: bold; }
+.skill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skill-remove {
+  background: none;
+  border: none;
+  color: #f0a0a0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 0;
+  line-height: 1;
+}
+.skill-remove:hover { color: #f5c0c0; }
+.drag-handle {
+  cursor: grab;
+  color: #8a7ab0;
+  font-size: 0.9rem;
+  line-height: 1;
+  user-select: none;
+}
+.drag-handle:hover { color: #b79cf0; }
 
 .clickable-name {
   color: #b79cf0;
@@ -509,6 +594,45 @@ body {
   font-size: 1rem;
   cursor: pointer;
 }
+
+.modal-box-editable {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.modal-edit-title {
+  font-family: inherit;
+  font-size: 1.1rem;
+  font-weight: bold;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #5a4a7a;
+  background: #1a1024;
+  color: #f0e6ff;
+  margin-top: 8px;
+}
+.modal-edit-desc {
+  font-family: inherit;
+  font-size: 0.95rem;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #5a4a7a;
+  background: #1a1024;
+  color: #f0e6ff;
+  min-height: 120px;
+  resize: vertical;
+}
+.modal-save-btn {
+  align-self: flex-end;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #4a9d5f;
+  color: white;
+  font-family: inherit;
+  cursor: pointer;
+}
+.modal-save-btn:hover { background: #5cb571; }
 
 .char-card-error {
   color: #f0a0a0;
@@ -642,33 +766,38 @@ body {
   opacity: 0.9;
 }
 
-.conditions-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
+.conditions-list { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
 .condition-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   background: #3a3050;
   border-radius: 6px;
   padding: 6px 12px;
   opacity: 0.55;
   transition: opacity 0.15s ease, border-color 0.15s ease;
   border: 1px solid transparent;
-  flex: 1 1 260px;
+  /* Fixed, not flexible — JS (equalizeRowWidths) sets an explicit width
+     equal to the widest chip in the list, same trick as .skill-row. */
+  flex: 0 0 auto;
 }
 .condition-row.is-active {
   opacity: 1;
   border-color: #7d5cbb;
 }
+.condition-row[draggable="true"] { cursor: grab; }
+.condition-row.is-dragging { opacity: 0.4; }
+.condition-row.drag-over-before { box-shadow: inset 3px 0 0 #b79cf0; }
+.condition-row.drag-over-after { box-shadow: inset -3px 0 0 #b79cf0; }
 .condition-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
+  min-width: 0;
 }
+.condition-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .condition-controls {
   display: flex;
   align-items: center;
@@ -695,6 +824,8 @@ body {
   cursor: pointer;
   font-family: inherit;
   font-size: 0.9rem;
+  padding: 0;
+  line-height: 1;
 }
 .condition-remove:hover { color: #f5c0c0; }
 
@@ -792,8 +923,7 @@ body {
 }
 
 .bp-shop-item-row,
-.bp-cart-item-row,
-.bp-owned-item-row {
+.bp-cart-item-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -801,6 +931,28 @@ body {
   border-radius: 6px;
   padding: 6px 10px;
   gap: 8px;
+}
+
+/* Grid, not flex: with 3 children (name / qty-controls / return button),
+   justify-content: space-between centers the middle item based on
+   whatever space is left over — which shifts with the item name's length.
+   A fixed-column grid keeps qty-controls and the return button locked to
+   the same x position on every row, so the +/- and quantity line up
+   cleanly regardless of name length. */
+.bp-owned-item-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  background: #3a3050;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.bp-owned-item-row .item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bp-add-cart-btn,

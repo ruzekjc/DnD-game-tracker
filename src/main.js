@@ -112,10 +112,19 @@ function mountCharacterCard(record) {
   const card = createCharacterCard(
     record.data,
     (updatedCharacter) => notifyCharacterChanged(updatedCharacter),
-    () => handleSaveCharacter(record)
+    () => handleSaveCharacter(record),
+    () => closeCurrentCharacter()
   );
 
   return { card };
+}
+
+// "Close" just deselects the current character in the single-panel viewer —
+// their data/card stays cached in characterEntries, so reopening via the
+// dropdown or arrows is instant and doesn't lose in-progress edits.
+function closeCurrentCharacter() {
+  selectedCharacterIndex = -1;
+  renderCurrentCharacter();
 }
 
 function populateCharNav() {
@@ -133,7 +142,11 @@ function renderCurrentCharacter() {
 
   const entry = characterEntries[selectedCharacterIndex];
   if (!entry) {
-    charDisplay.innerHTML = '<p class="bp-empty">Import a character to get started.</p>';
+    charDisplay.innerHTML = characterEntries.length
+      ? '<p class="bp-empty">No character selected — choose one above.</p>'
+      : '<p class="bp-empty">Import a character to get started.</p>';
+    populateCharNav();
+    if (bottomPanel) bottomPanel.selectCharacter(null);
     return;
   }
 
