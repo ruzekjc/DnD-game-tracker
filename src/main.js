@@ -76,6 +76,7 @@ let shopEnemyPanel = null;
 let selectedCharacterIndex = -1;
 
 function notifyCharacterChanged(character) {
+  populateCharNav(); // reflect a rename immediately in the dropdown
   if (bottomPanel) bottomPanel.refreshIfSelected(character);
 }
 
@@ -111,9 +112,7 @@ function mountCharacterCard(record) {
 
   const card = createCharacterCard(
     record.data,
-    (updatedCharacter) => notifyCharacterChanged(updatedCharacter),
-    () => handleSaveCharacter(record),
-    () => closeCurrentCharacter()
+    (updatedCharacter) => notifyCharacterChanged(updatedCharacter)
   );
 
   return { card };
@@ -136,6 +135,26 @@ function populateCharNav() {
   select.value = selectedCharacterIndex >= 0 ? String(selectedCharacterIndex) : '';
 }
 
+// The Edit/Save/Close buttons live in the global toolbar (next to Import),
+// not on the card itself, since only one card is ever shown at a time.
+// This keeps their enabled state and the Edit button's label in sync with
+// whichever character is currently on screen.
+function updateCharToolbarButtons() {
+  const entry = characterEntries[selectedCharacterIndex];
+  const editBtn = document.getElementById('char-edit-btn');
+  const saveBtn = document.getElementById('char-save-btn');
+  const closeBtn = document.getElementById('char-close-btn');
+  if (!editBtn || !saveBtn || !closeBtn) return;
+
+  const has = !!entry;
+  editBtn.disabled = !has;
+  saveBtn.disabled = !has;
+  closeBtn.disabled = !has;
+  const editing = has && entry.cardEl.getEditMode();
+  editBtn.textContent = editing ? '✅ Done' : '✏️ Edit';
+  editBtn.classList.toggle('is-active', editing);
+}
+
 function renderCurrentCharacter() {
   if (!charDisplay) return;
   charDisplay.innerHTML = '';
@@ -146,12 +165,14 @@ function renderCurrentCharacter() {
       ? '<p class="bp-empty">No character selected — choose one above.</p>'
       : '<p class="bp-empty">Import a character to get started.</p>';
     populateCharNav();
+    updateCharToolbarButtons();
     if (bottomPanel) bottomPanel.selectCharacter(null);
     return;
   }
 
   charDisplay.appendChild(entry.cardEl);
   populateCharNav();
+  updateCharToolbarButtons();
   if (bottomPanel) bottomPanel.selectCharacter(entry.character);
 }
 
@@ -582,6 +603,32 @@ function init() {
   const newCharacterBtn = document.getElementById('new-character-btn');
   if (newCharacterBtn) {
     newCharacterBtn.addEventListener('click', handleCreateCharacter);
+  }
+
+  const charEditBtn = document.getElementById('char-edit-btn');
+  const charSaveBtn = document.getElementById('char-save-btn');
+  const charCloseBtn = document.getElementById('char-close-btn');
+  if (charEditBtn) {
+    charEditBtn.addEventListener('click', () => {
+      const entry = characterEntries[selectedCharacterIndex];
+      if (!entry) return;
+      entry.cardEl.toggleEditMode();
+      updateCharToolbarButtons();
+    });
+  }
+  if (charSaveBtn) {
+    charSaveBtn.addEventListener('click', async () => {
+      const entry = characterEntries[selectedCharacterIndex];
+      if (!entry) return;
+      charSaveBtn.disabled = true;
+      charSaveBtn.textContent = 'Saving…';
+      await handleSaveCharacter(entry.record);
+      charSaveBtn.textContent = '💾 Save';
+      updateCharToolbarButtons();
+    });
+  }
+  if (charCloseBtn) {
+    charCloseBtn.addEventListener('click', () => closeCurrentCharacter());
   }
 
   const charSelect = document.getElementById('char-select');

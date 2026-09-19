@@ -7,7 +7,7 @@ import { createTradeTab } from './Trade.js';
 import { addExp, normalizeExp } from './progression.js';
 import { showLevelUpModal } from './levelUpModal.js';
 import { showModal } from './modal.js';
-import { parseQuickAdd } from './utils.js';
+import { parseQuickAdd, attachDragReorder } from './utils.js';
 
 /**
  * The bottom panel: three tabs.
@@ -184,6 +184,18 @@ export function createBottomPanel(characterEntries, shopRecords, onExpChange) {
       cartTotalEl.textContent = `Total: ${formatPurse(fromCopper(totalCopper))}`;
     }
 
+    // Reordering is always live here (there's no separate edit/view mode
+    // for the owned-items list — it's already a working inventory, not a
+    // character sheet field). Attach once to the persistent container;
+    // renderOwnedItems() only ever replaces its innerHTML, never the
+    // element itself, so this survives repeated re-renders without
+    // stacking duplicate listeners.
+    attachDragReorder(ownedItemsEl, '.bp-owned-item-row', character.inventory, (reordered) => {
+      character.inventory.length = 0;
+      character.inventory.push(...reordered);
+      renderOwnedItems();
+    }, 'vertical');
+
     function renderOwnedItems() {
       ownedItemsEl.innerHTML = '';
       if (!character.inventory.length) {
@@ -192,14 +204,19 @@ export function createBottomPanel(characterEntries, shopRecords, onExpChange) {
       character.inventory.forEach((invItem, i) => {
         const row = document.createElement('div');
         row.className = 'bp-owned-item-row';
+        row.draggable = true;
         row.innerHTML = `
+          <span class="drag-handle" title="Drag to reorder">⠿</span>
           <span class="item-name">${invItem.item}</span>
           <div class="qty-controls">
             <button class="qty-btn minus">−</button>
             <span class="qty-value">${invItem.qty}</span>
             <button class="qty-btn plus">+</button>
           </div>
-          <button class="bp-return-btn">↩ Return</button>
+          <div class="bp-owned-item-actions">
+            <button class="bp-return-btn" title="Return one to the shop for a refund">↩</button>
+            <button class="bp-discard-btn" title="Discard the whole stack (no refund)">🗑</button>
+          </div>
         `;
 
         row.querySelector('.minus').addEventListener('click', () => {
@@ -214,6 +231,10 @@ export function createBottomPanel(characterEntries, shopRecords, onExpChange) {
         row.querySelector('.bp-return-btn').addEventListener('click', () => {
           returnItem(invItem, i);
         });
+        row.querySelector('.bp-discard-btn').addEventListener('click', () => {
+          character.inventory.splice(i, 1);
+          renderOwnedItems();
+        });
 
         ownedItemsEl.appendChild(row);
       });
@@ -221,7 +242,7 @@ export function createBottomPanel(characterEntries, shopRecords, onExpChange) {
       const addRow = document.createElement('div');
       addRow.className = 'inventory-add-row';
       addRow.innerHTML = `
-        <input type="text" class="new-item-input" placeholder="New item (e.g. Vials x30)..." />
+        <input type="text" class="new-item-input" placeholder="New item (Vials x30, Rounds-10)..." />
         <button class="add-item-btn">+ Add</button>
       `;
       const newItemInput = addRow.querySelector('.new-item-input');
@@ -229,10 +250,26 @@ export function createBottomPanel(characterEntries, shopRecords, onExpChange) {
       function commitAddItem() {
         const raw = newItemInput.value.trim();
         if (!raw) return;
-        const { name, amount } = parseQuickAdd(raw, 'qty');
-        const existing = character.inventory.find((i) => i.item === name);
-        if (existing) existing.qty += amount;
-        else character.inventory.push({ item: name, qty: amount });
+        const { name, amount, op } = parseQuickAdd(raw, 'qty');
+        // Case-insensitive so "Roundsx20" and "roundsx20" both stack onto
+        // the same existing "Rounds" entry instead of creating a duplicate.
+        const existing = character.inventory.find(
+          (i) => i.item.trim().toLowerCase() === name.toLowerCase()
+        );
+        if (op === 'subtract') {
+          if (existing) {
+            existing.qty -= amount;
+            if (existing.qty <= 0) {
+              character.inventory.splice(character.inventory.indexOf(existing), 1);
+            }
+          }
+          // Nothing to subtract from — silently a no-op, same as trying to
+          // spend a stack that doesn't exist.
+        } else if (existing) {
+          existing.qty += amount;
+        } else {
+          character.inventory.push({ item: name, qty: amount });
+        }
         newItemInput.value = '';
         renderOwnedItems();
       }

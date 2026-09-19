@@ -21,8 +21,13 @@
   <div class="app-layout">
     <div id="app">
       <div class="char-panel-toolbar">
-        <button id="import-characters-btn" class="import-btn">+ Import</button>
-        <button id="new-character-btn" class="import-btn">+ New Character</button>
+        <div class="char-panel-actions">
+          <button id="import-characters-btn" class="import-btn">+ Import</button>
+          <button id="new-character-btn" class="import-btn">+ New Character</button>
+          <button id="char-edit-btn" class="import-btn char-edit-btn" type="button" disabled>✏️ Edit</button>
+          <button id="char-save-btn" class="import-btn char-save-btn" type="button" disabled>💾 Save</button>
+          <button id="char-close-btn" class="import-btn char-close-btn" type="button" disabled>✕ Close</button>
+        </div>
         <div class="char-nav">
           <button id="char-prev-btn" class="nav-arrow-btn" type="button">←</button>
           <select id="char-select"></select>

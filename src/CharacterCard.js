@@ -10,21 +10,19 @@ import { showModal, showEditableModal } from './modal.js';
  * skills, level/EXP, and wallet (quick manual add/spend, separate from the
  * bottom panel's shop-driven transactions).
  *
- * Edit mode: a pencil toggle in the header switches the whole card between
- * a clean read-only VIEW mode (for actual play) and an EDIT mode that
- * unlocks inline editing of name/title/race/occupation/backstory/dice/
- * traits, ability & passive name+description (via a popup), and hands an
- * "editable" flag down into the skills/conditions lists (which stay
- * read-only for names but keep their +/- and toggle controls live either
- * way, since those get used mid-session).
+ * Edit mode is toggled from OUTSIDE this module now — main.js drives a
+ * single global Edit/Save/Close toolbar (next to Import, above the card)
+ * rather than each card carrying its own buttons, since only one card is
+ * ever on screen at a time anyway. This function exposes
+ * `card.toggleEditMode()` and `card.getEditMode()` for that toolbar to
+ * drive, and `card.getEditMode()` also gates the skills/conditions lists,
+ * which keep their +/- and toggle controls live either way (used
+ * mid-session, not just when building a sheet).
  *
  * @param {Object} character
  * @param {Function} [onCharacterChange]
- * @param {Function} [onSaveRequest]
- * @param {Function} [onClose] - called when the ✕ close button is clicked
- *   (the single-character panel just deselects; the card/data isn't lost).
  */
-export function createCharacterCard(character, onCharacterChange, onSaveRequest, onClose) {
+export function createCharacterCard(character, onCharacterChange) {
   const card = document.createElement('div');
   card.className = 'char-card';
 
@@ -38,11 +36,6 @@ export function createCharacterCard(character, onCharacterChange, onSaveRequest,
   card.innerHTML = `
     <div class="card-name-bar">
       <h2 class="card-name-toggle editable-field" data-editable="name">${character.name}</h2>
-      <div class="card-name-bar-actions">
-        <button class="edit-mode-btn" title="Toggle edit mode" type="button">✏️ Edit</button>
-        ${onSaveRequest ? '<button class="save-btn">💾 Save</button>' : ''}
-        ${onClose ? '<button class="close-card-btn" title="Close character" type="button">✕</button>' : ''}
-      </div>
     </div>
 
     <div class="card-body">
@@ -244,23 +237,8 @@ export function createCharacterCard(character, onCharacterChange, onSaveRequest,
   card.querySelector('.purse-slot').appendChild(purseEl);
   card.purseEl = purseEl; // exposed so main.js/BottomPanel can trigger a refresh after external edits (buy/trade)
 
-  // --- Save ---
-  const saveBtn = card.querySelector('.save-btn');
-  if (saveBtn && onSaveRequest) {
-    saveBtn.addEventListener('click', async () => {
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving…';
-      await onSaveRequest();
-      saveBtn.disabled = false;
-      saveBtn.textContent = '💾 Save';
-    });
-  }
-
-  // --- Close ---
-  const closeBtn = card.querySelector('.close-card-btn');
-  if (closeBtn && onClose) {
-    closeBtn.addEventListener('click', () => onClose());
-  }
+  // --- Save/Close are driven externally now (see the module doc comment) —
+  // nothing to wire here.
 
   // --- Backstory expand ---
   const backstoryText = card.querySelector('.backstory-text');
@@ -356,7 +334,6 @@ export function createCharacterCard(character, onCharacterChange, onSaveRequest,
 
   function applyEditMode() {
     card.classList.toggle('is-edit-mode', isEditMode);
-    editModeBtn.textContent = isEditMode ? '✅ Done' : '✏️ Edit';
     editableFieldEls.forEach((el) => { el.contentEditable = isEditMode ? 'true' : 'false'; });
     // Placeholder text swap for empty traits when toggling modes
     if (!character.racialTraits || !character.racialTraits.length) {
@@ -369,13 +346,14 @@ export function createCharacterCard(character, onCharacterChange, onSaveRequest,
     abilityRowRefreshers.forEach((fn) => fn());
   }
 
-  const editModeBtn = card.querySelector('.edit-mode-btn');
-  editModeBtn.addEventListener('click', () => {
+  applyEditMode();
+
+  // --- External controls (driven by main.js's global toolbar) ---
+  card.toggleEditMode = () => {
     isEditMode = !isEditMode;
     applyEditMode();
-  });
-
-  applyEditMode();
+  };
+  card.getEditMode = () => isEditMode;
 
   return card;
 }

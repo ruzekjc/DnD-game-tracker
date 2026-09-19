@@ -54,10 +54,14 @@ export function makeHideable(contentEl, label = 'Details') {
  * adding then hunting for the +/- buttons.
  *
  *  - kind 'value' (skills, conditions): "Agility+2", "Stealth -3", "Luck+10"
- *    -> { name: 'Agility', amount: 2 }. No recognized suffix -> amount 0.
- *  - kind 'qty' (inventory items): "Vials x30", "ropex5", "Torch X 2"
- *    -> { name: 'Vials', amount: 30 }. No recognized suffix -> amount 1
- *    (matches the previous default of adding a new item at qty 1).
+ *    -> { name: 'Agility', amount: 2, op: 'add' }. No recognized suffix ->
+ *    amount 0, op 'add'.
+ *  - kind 'qty' (inventory items): "Vials x30", "ropex5", "Torch X 2" add
+ *    to an existing stack (or create one) -> { name, amount, op: 'add' }.
+ *    "Rounds-10" subtracts from an existing stack instead ->
+ *    { name: 'Rounds', amount: 10, op: 'subtract' }. No recognized suffix
+ *    -> amount 1, op 'add' (matches the previous default of adding a new
+ *    item at qty 1).
  *
  * Falls back to treating the whole input as the name when no suffix
  * matches, so plain "Perception" or "Rope" still works exactly as before.
@@ -66,19 +70,23 @@ export function parseQuickAdd(raw, kind) {
   const text = (raw || '').trim();
 
   if (kind === 'qty') {
-    const m = text.match(/^(.*?)\s*[xX]\s*(\d+)\s*$/);
-    if (m && m[1].trim()) {
-      return { name: m[1].trim(), amount: Math.max(1, parseInt(m[2], 10)) };
+    const addMatch = text.match(/^(.*?)\s*[xX]\s*(\d+)\s*$/);
+    if (addMatch && addMatch[1].trim()) {
+      return { name: addMatch[1].trim(), amount: Math.max(1, parseInt(addMatch[2], 10)), op: 'add' };
     }
-    return { name: text, amount: 1 };
+    const subMatch = text.match(/^(.*?)\s*-\s*(\d+)\s*$/);
+    if (subMatch && subMatch[1].trim()) {
+      return { name: subMatch[1].trim(), amount: Math.max(1, parseInt(subMatch[2], 10)), op: 'subtract' };
+    }
+    return { name: text, amount: 1, op: 'add' };
   }
 
   // kind === 'value' (default)
   const m = text.match(/^(.*?)\s*([+-]\s*\d+)\s*$/);
   if (m && m[1].trim()) {
-    return { name: m[1].trim(), amount: parseInt(m[2].replace(/\s+/g, ''), 10) };
+    return { name: m[1].trim(), amount: parseInt(m[2].replace(/\s+/g, ''), 10), op: 'add' };
   }
-  return { name: text, amount: 0 };
+  return { name: text, amount: 0, op: 'add' };
 }
 
 /**
@@ -96,17 +104,30 @@ export function parseQuickAdd(raw, kind) {
  * @param {Array} array - the backing array to reorder in place
  * @param {Function} onReorder - called with the reordered array so the
  *   caller can re-render and fire its own onChange
+ * @param {'horizontal'|'vertical'} [orientation] - 'horizontal' (default)
+ *   splits each row left/right for wrapping chip lists (skills,
+ *   conditions) and applies .drag-over-before/.drag-over-after. 'vertical'
+ *   splits top/bottom for stacked lists (shop inventory, owned items) and
+ *   applies .drag-over-top/.drag-over-bottom instead.
  */
-export function attachDragReorder(container, rowSelector, array, onReorder) {
+export function attachDragReorder(container, rowSelector, array, onReorder, orientation = 'horizontal') {
   let dragEl = null;
   let dragIndex = -1;
+  const beforeClass = orientation === 'vertical' ? 'drag-over-top' : 'drag-over-before';
+  const afterClass = orientation === 'vertical' ? 'drag-over-bottom' : 'drag-over-after';
 
   function rows() {
     return Array.from(container.querySelectorAll(rowSelector));
   }
 
   function clearIndicators() {
-    rows().forEach((r) => r.classList.remove('drag-over-before', 'drag-over-after'));
+    rows().forEach((r) => r.classList.remove(beforeClass, afterClass));
+  }
+
+  function isBefore(e, rect) {
+    return orientation === 'vertical'
+      ? (e.clientY - rect.top) < rect.height / 2
+      : (e.clientX - rect.left) < rect.width / 2;
   }
 
   container.addEventListener('dragstart', (e) => {
@@ -125,10 +146,10 @@ export function attachDragReorder(container, rowSelector, array, onReorder) {
     if (!row || row === dragEl) return;
     e.preventDefault();
     const rect = row.getBoundingClientRect();
-    const before = (e.clientX - rect.left) < rect.width / 2;
+    const before = isBefore(e, rect);
     clearIndicators();
-    row.classList.toggle('drag-over-before', before);
-    row.classList.toggle('drag-over-after', !before);
+    row.classList.toggle(beforeClass, before);
+    row.classList.toggle(afterClass, !before);
   });
 
   container.addEventListener('drop', (e) => {
@@ -141,7 +162,7 @@ export function attachDragReorder(container, rowSelector, array, onReorder) {
       const list = rows();
       const overIndex = list.indexOf(row);
       const rect = row.getBoundingClientRect();
-      const before = (e.clientX - rect.left) < rect.width / 2;
+      const before = isBefore(e, rect);
       let targetIndex = before ? overIndex : overIndex + 1;
       if (dragIndex < targetIndex) targetIndex -= 1;
 

@@ -77,17 +77,26 @@ export function createShopEnemyPanel(shopRecords, enemyRecords, handlers = {}) {
     const record = list[index];
     if (!record) return;
 
+    // Renaming a shop/enemy in edit mode rebuilds the dropdown's option
+    // labels — restore the selection afterward, since replacing a
+    // <select>'s innerHTML otherwise silently resets it to index 0.
+    function refreshSelectLabel() {
+      populateSelect();
+      select.value = String(index);
+    }
+
     const view =
       mode === 'shop'
         ? createShopView(record.data, {
             onChange: () => {
+              refreshSelectLabel();
               if (handlers.onShopChanged) handlers.onShopChanged(record.data);
             },
             onSaveRequest: () => handleSave(record),
             getLibraryItems: handlers.getLibraryItems,
             onImportLibrary: handlers.onImportLibrary
           })
-        : createEnemyView(record.data, null, () => handleSave(record), {
+        : createEnemyView(record.data, refreshSelectLabel, () => handleSave(record), {
             getTierTemplate: handlers.getTierTemplate,
             onImportTierTemplates: handlers.onImportTierTemplates
           });

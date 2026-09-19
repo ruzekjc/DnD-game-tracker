@@ -1,11 +1,12 @@
 import { parseQuickAdd, attachDragReorder, equalizeRowWidths } from './utils.js';
 
 /**
- * Renders a skills list ("mods"): each skill is a name + numeric value with
- * +/- controls.
+ * Renders a skills list ("mods"): each entry is a name + numeric value with
+ * +/- controls. Also reused for enemy mods, which key the name field as
+ * "stat" instead of "name" — pass `nameKey: 'stat'` in options for that.
  *
  *  - Quick-add: typing "Agility+2" (or "Stealth -3") into the add field and
- *    hitting Enter (or clicking + Add) creates the skill pre-set to that
+ *    hitting Enter (or clicking + Add) creates the entry pre-set to that
  *    value. Plain text with no +/- suffix still adds at 0, as before.
  *  - Edit mode only: drag-and-drop reordering, name editing, and a remove
  *    button. Outside edit mode the list is read-only except for the +/-
@@ -14,12 +15,16 @@ import { parseQuickAdd, attachDragReorder, equalizeRowWidths } from './utils.js'
  *    fit the longest name) after each render, so rows line up cleanly no
  *    matter how many chips share a line.
  *
- * @param {Array} skills - array of { name, value } (mutated in place)
+ * @param {Array} skills - array of { [nameKey]: string, value: number } (mutated in place)
  * @param {Function} [onChange] - fired on any change
  * @param {Function} [getEditMode] - () => boolean; defaults to always-on
  *   (matches the previous always-editable behavior) if omitted.
+ * @param {Object} [options] - { nameKey?: string, addPlaceholder?: string }
  */
-export function createSkillsList(skills, onChange, getEditMode = () => true) {
+export function createSkillsList(skills, onChange, getEditMode = () => true, options = {}) {
+  const nameKey = options.nameKey || 'name';
+  const addPlaceholder = options.addPlaceholder || 'New skill (e.g. Agility+2)...';
+
   const container = document.createElement('div');
   container.className = 'skills-list';
 
@@ -44,19 +49,19 @@ export function createSkillsList(skills, onChange, getEditMode = () => true) {
 
       row.innerHTML = `
         ${editMode ? '<span class="drag-handle" title="Drag to reorder">⠿</span>' : ''}
-        <span class="skill-name editable-text" ${editMode ? 'contenteditable="true"' : ''}>${skill.name}</span>
+        <span class="skill-name editable-text" ${editMode ? 'contenteditable="true"' : ''}>${skill[nameKey]}</span>
         <div class="qty-controls">
           <button class="qty-btn minus">−</button>
           <span class="skill-value">${sign}${skill.value}</span>
           <button class="qty-btn plus">+</button>
         </div>
-        ${editMode ? '<button class="skill-remove" title="Remove skill">✕</button>' : ''}
+        ${editMode ? '<button class="skill-remove" title="Remove">✕</button>' : ''}
       `;
 
       if (editMode) {
         const nameEl = row.querySelector('.skill-name');
         nameEl.addEventListener('blur', (e) => {
-          skill.name = e.target.textContent.trim() || skill.name;
+          skill[nameKey] = e.target.textContent.trim() || skill[nameKey];
           if (onChange) onChange(skills);
         });
         nameEl.addEventListener('keydown', (e) => {
@@ -92,7 +97,7 @@ export function createSkillsList(skills, onChange, getEditMode = () => true) {
       const addRow = document.createElement('div');
       addRow.className = 'inventory-add-row';
       addRow.innerHTML = `
-        <input type="text" class="new-item-input" placeholder="New skill (e.g. Agility+2)..." />
+        <input type="text" class="new-item-input" placeholder="${addPlaceholder}" />
         <button class="add-item-btn">+ Add</button>
       `;
 
@@ -102,7 +107,7 @@ export function createSkillsList(skills, onChange, getEditMode = () => true) {
         const raw = input.value.trim();
         if (!raw) return;
         const { name, amount } = parseQuickAdd(raw, 'value');
-        skills.push({ name, value: amount });
+        skills.push({ [nameKey]: name, value: amount });
         input.value = '';
         render();
         if (onChange) onChange(skills);

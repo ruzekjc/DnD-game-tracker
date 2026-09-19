@@ -207,14 +207,6 @@ body {
   position: relative;
 }
 
-.card-name-bar-actions {
-  position: absolute;
-  right: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .card-name-toggle {
   margin: 0;
   cursor: pointer;
@@ -223,45 +215,46 @@ body {
 }
 .card-name-toggle:hover { opacity: 0.8; }
 
-.edit-mode-btn {
-  padding: 6px 10px;
-  border: 1px solid #7d5cbb;
-  border-radius: 6px;
-  background: rgba(183, 156, 240, 0.12);
-  color: #f0e6ff;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 0.85rem;
-}
-.edit-mode-btn:hover { background: rgba(183, 156, 240, 0.25); }
-.char-card.is-edit-mode .edit-mode-btn {
-  background: #6b4fa0;
-  border-color: #7d5cbb;
+/* Global character toolbar (Import / New Character / Edit / Save / Close) —
+   these act on whichever character is currently shown, since only one card
+   is ever on screen at a time (see .char-panel-toolbar in index.html). */
+.char-panel-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.close-card-btn {
-  padding: 6px 10px;
-  border: none;
-  border-radius: 6px;
-  background: #9d4a4a;
-  color: white;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 0.85rem;
-  line-height: 1;
+.char-edit-btn.is-active {
+  background: #6b4fa0;
+  border-color: #7d5cbb;
+  border-style: solid;
 }
-.close-card-btn:hover { background: #b55c5c; }
+
+.char-close-btn {
+  border: 1px solid #9d4a4a;
+  background: rgba(157, 74, 74, 0.15);
+}
+.char-close-btn:hover { background: rgba(157, 74, 74, 0.3); }
 
 /* Edit-mode affordance: any inline-editable field gets a dashed outline
    and text cursor only while the card is in edit mode, so view mode stays
    visually clean. */
-.char-card.is-edit-mode .editable-field[contenteditable="true"] {
+/* Edit-mode affordance: any inline-editable field gets a dashed outline
+   and text cursor only while its card/view is in edit mode, so view mode
+   stays visually clean. Shared by character cards, shop view, and enemy
+   view — all three use the same .editable-field + data-editable pattern. */
+.char-card.is-edit-mode .editable-field[contenteditable="true"],
+.shop-view.is-edit-mode .editable-field[contenteditable="true"],
+.enemy-view.is-edit-mode .editable-field[contenteditable="true"] {
   outline: 1px dashed #7d5cbb;
   outline-offset: 2px;
   cursor: text;
   border-radius: 3px;
 }
-.char-card.is-edit-mode .editable-field[contenteditable="true"]:focus {
+.char-card.is-edit-mode .editable-field[contenteditable="true"]:focus,
+.shop-view.is-edit-mode .editable-field[contenteditable="true"]:focus,
+.enemy-view.is-edit-mode .editable-field[contenteditable="true"]:focus {
   outline: 1px solid #b79cf0;
   background: rgba(183, 156, 240, 0.08);
 }
@@ -520,9 +513,6 @@ body {
   flex: 0 0 auto;
 }
 .skill-row[draggable="true"] { cursor: grab; }
-.skill-row.is-dragging { opacity: 0.4; }
-.skill-row.drag-over-before { box-shadow: inset 3px 0 0 #b79cf0; }
-.skill-row.drag-over-after { box-shadow: inset -3px 0 0 #b79cf0; }
 .skill-value { min-width: 30px; text-align: center; font-weight: bold; }
 .skill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skill-remove {
@@ -544,6 +534,16 @@ body {
   user-select: none;
 }
 .drag-handle:hover { color: #b79cf0; }
+
+/* Generic drag-and-drop state, shared by every reorderable list (skills,
+   conditions, shop inventory, owned items, enemy mods) — applied by
+   attachDragReorder() in utils.js. Horizontal lists (wrapping chips) get
+   a left/right insertion cue; vertical (stacked) lists get top/bottom. */
+.is-dragging { opacity: 0.4; }
+.drag-over-before { box-shadow: inset 3px 0 0 #b79cf0; }
+.drag-over-after { box-shadow: inset -3px 0 0 #b79cf0; }
+.drag-over-top { box-shadow: inset 0 3px 0 #b79cf0; }
+.drag-over-bottom { box-shadow: inset 0 -3px 0 #b79cf0; }
 
 .clickable-name {
   color: #b79cf0;
@@ -706,21 +706,63 @@ body {
   margin-bottom: 12px;
 }
 
+.shop-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.shop-header-actions,
+.enemy-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.edit-mode-btn {
+  padding: 6px 10px;
+  border: 1px solid #7d5cbb;
+  border-radius: 6px;
+  background: rgba(183, 156, 240, 0.12);
+  color: #f0e6ff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.edit-mode-btn:hover { background: rgba(183, 156, 240, 0.25); }
+.edit-mode-btn.is-active {
+  background: #6b4fa0;
+  border-color: #7d5cbb;
+}
+
 .shop-name,
 .enemy-name {
-  margin: 0 0 4px 0;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shop-description {
   opacity: 0.85;
   font-style: italic;
-  margin: 0;
+  margin: 6px 0 0 0;
 }
 
+/* Grid, not flex — with 3 children (name / tier badge / actions),
+   justify-content: space-between would center the badge based on
+   whatever space the name leaves over, drifting per enemy name length
+   (the same bug fixed on the owned-items row). A fixed-column grid keeps
+   the badge and buttons locked to the same position on every enemy. */
 .enemy-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
 }
 
 .enemy-tier-badge {
@@ -740,14 +782,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-.shop-inventory-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #3a3050;
-  border-radius: 6px;
-  padding: 8px 12px;
 }
 .item-price {
   font-weight: bold;
@@ -787,9 +821,6 @@ body {
   border-color: #7d5cbb;
 }
 .condition-row[draggable="true"] { cursor: grab; }
-.condition-row.is-dragging { opacity: 0.4; }
-.condition-row.drag-over-before { box-shadow: inset 3px 0 0 #b79cf0; }
-.condition-row.drag-over-after { box-shadow: inset -3px 0 0 #b79cf0; }
 .condition-toggle {
   display: flex;
   align-items: center;
@@ -941,19 +972,31 @@ body {
    cleanly regardless of name length. */
 .bp-owned-item-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: auto 1fr auto auto;
   align-items: center;
   gap: 10px;
   background: #3a3050;
   border-radius: 6px;
   padding: 6px 10px;
 }
+.bp-owned-item-row[draggable="true"] { cursor: grab; }
 .bp-owned-item-row .item-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.bp-owned-item-actions { display: flex; align-items: center; gap: 6px; }
+.bp-discard-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #6b3a3a;
+  color: white;
+  cursor: pointer;
+  font-family: inherit;
+}
+.bp-discard-btn:hover { background: #8a4a4a; }
 
 .bp-add-cart-btn,
 .bp-remove-cart-btn,
@@ -1057,11 +1100,6 @@ body {
 }
 .save-btn:hover { background: #5cb571; }
 .save-btn:disabled { opacity: 0.6; cursor: default; }
-
-.enemy-header {
-  flex-wrap: wrap;
-  gap: 8px;
-}
 
 .reconnect-banner {
   display: flex;
@@ -1334,9 +1372,28 @@ body {
 
 .shop-inventory-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: auto 1fr auto auto;
   align-items: center;
   gap: 10px;
+  background: #3a3050;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.shop-inventory-row[draggable="true"] { cursor: grab; }
+.shop-inventory-row .item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Drag-handle and remove-button are always in the DOM (see Shop.js) so the
+   4-column grid stays identical between edit/view mode — just hidden
+   (not display:none, so their column width is still reserved) outside
+   edit mode. */
+.shop-inventory-list:not(.is-edit-mode) .shop-inventory-row .drag-handle,
+.shop-inventory-list:not(.is-edit-mode) .shop-remove-item-btn {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .shop-item-price-edit {
